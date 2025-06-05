@@ -23,7 +23,7 @@
 		13B07FB61A68108700A75B9A /* Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = Info.plist; path = exporealtimeivsbroadcastexample/Info.plist; sourceTree = "<group>"; };
 		16BF4D5AE74523F5828E8C4A /* Pods-exporealtimeivsbroadcastexample.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-exporealtimeivsbroadcastexample.debug.xcconfig"; path = "Target Support Files/Pods-exporealtimeivsbroadcastexample/Pods-exporealtimeivsbroadcastexample.debug.xcconfig"; sourceTree = "<group>"; };
 		69CC431B28B3FC3E6529B544 /* Pods-exporealtimeivsbroadcastexample.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-exporealtimeivsbroadcastexample.release.xcconfig"; path = "Target Support Files/Pods-exporealtimeivsbroadcastexample/Pods-exporealtimeivsbroadcastexample.release.xcconfig"; sourceTree = "<group>"; };
-		6F30E8C0494B4F0D1783C7AD /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; includeInIndex = 1; name = PrivacyInfo.xcprivacy; path = exporealtimeivsbroadcastexample/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		6F30E8C0494B4F0D1783C7AD /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xml; name = PrivacyInfo.xcprivacy; path = exporealtimeivsbroadcastexample/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		A9B36445A54A83922FC5EB56 /* ExpoModulesProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ExpoModulesProvider.swift; path = "Pods/Target Support Files/Pods-exporealtimeivsbroadcastexample/ExpoModulesProvider.swift"; sourceTree = "<group>"; };
 		AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = SplashScreen.storyboard; path = exporealtimeivsbroadcastexample/SplashScreen.storyboard; sourceTree = "<group>"; };
 		BB2F792C24A3F905000567C9 /* Expo.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; path = Expo.plist; sourceTree = "<group>"; };
@@ -72,7 +72,6 @@
 				16BF4D5AE74523F5828E8C4A /* Pods-exporealtimeivsbroadcastexample.debug.xcconfig */,
 				69CC431B28B3FC3E6529B544 /* Pods-exporealtimeivsbroadcastexample.release.xcconfig */,
 			);
-			name = Pods;
 			path = Pods;
 			sourceTree = "<group>";
 		};
@@ -298,10 +297,12 @@
 			);
 			inputPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-exporealtimeivsbroadcastexample/Pods-exporealtimeivsbroadcastexample-frameworks.sh",
+				"${PODS_XCFRAMEWORKS_BUILD_DIR}/AmazonIVSBroadcast/Stages/AmazonIVSBroadcast.framework/AmazonIVSBroadcast",
 				"${PODS_XCFRAMEWORKS_BUILD_DIR}/hermes-engine/Pre-built/hermes.framework/hermes",
 			);
 			name = "[CP] Embed Pods Frameworks";
 			outputPaths = (
+				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/AmazonIVSBroadcast.framework",
 				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/hermes.framework",
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -332,6 +333,7 @@
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = exporealtimeivsbroadcastexample/exporealtimeivsbroadcastexample.entitlements;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = RAWA4XX278;
 				ENABLE_BITCODE = NO;
 				GCC_PREPROCESSOR_DEFINITIONS = (
 					"$(inherited)",
@@ -368,6 +370,7 @@
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = exporealtimeivsbroadcastexample/exporealtimeivsbroadcastexample.entitlements;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = RAWA4XX278;
 				INFOPLIST_FILE = exporealtimeivsbroadcastexample/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
 				LD_RUNPATH_SEARCH_PATHS = (

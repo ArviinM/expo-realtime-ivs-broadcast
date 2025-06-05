@@ -1,4 +1,5 @@
 PODS:
+  - AmazonIVSBroadcast/Stages (1.30.0)
   - boost (1.84.0)
   - DoubleConversion (1.1.6)
   - EXConstants (17.1.6):
@@ -64,6 +65,7 @@ PODS:
     - ReactCommon/turbomodule/core
     - Yoga
   - ExpoRealtimeIvsBroadcast (0.1.0):
+    - AmazonIVSBroadcast/Stages (~> 1.30.0)
     - ExpoModulesCore
   - fast_float (6.1.4)
   - FBLazyVector (0.79.3)
@@ -1805,6 +1807,7 @@ DEPENDENCIES:
 
 SPEC REPOS:
   trunk:
+    - AmazonIVSBroadcast
     - SocketRocket
 
 EXTERNAL SOURCES:
@@ -1967,6 +1970,7 @@ EXTERNAL SOURCES:
     :path: "../node_modules/react-native/ReactCommon/yoga"
 
 SPEC CHECKSUMS:
+  AmazonIVSBroadcast: 8549ba4be7bed7e78f67292f264f7e9492b42d18
   boost: 7e761d76ca2ce687f7cc98e698152abd03a18f90
   DoubleConversion: cb417026b2400c8f53ae97020b2be961b59470cb
   EXConstants: 9f310f44bfedba09087042756802040e464323c0
@@ -1976,7 +1980,7 @@ SPEC CHECKSUMS:
   ExpoFont: abbb91a911eb961652c2b0a22eef801860425ed6
   ExpoKeepAwake: bf0811570c8da182bfb879169437d4de298376e7
   ExpoModulesCore: d431ffe83c8673d02cb38425594a5f5480fd3061
-  ExpoRealtimeIvsBroadcast: 91ce1d68d5db2747558c013d393c8bd586559e3f
+  ExpoRealtimeIvsBroadcast: 5967b99996f4f84e1a6db324fc986f33d22e17f8
   fast_float: 06eeec4fe712a76acc9376682e4808b05ce978b6
   FBLazyVector: a62a7a5760929b6265e27bc01ab7598dde93ebd3
   fmt: a40bb5bd0294ea969aaaba240a927bd33d878cdd

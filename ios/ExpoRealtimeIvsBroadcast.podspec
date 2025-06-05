@@ -11,14 +11,14 @@ Pod::Spec.new do |s|
   s.author         = package['author']
   s.homepage       = package['homepage']
   s.platforms      = {
-    :ios => '15.1',
-    :tvos => '15.1'
+    :ios => '14.0'
   }
   s.swift_version  = '5.4'
   s.source         = { git: 'https://github.com/ArviinM/expo-realtime-ivs-broadcast' }
   s.static_framework = true
 
   s.dependency 'ExpoModulesCore'
+  s.dependency 'AmazonIVSBroadcast/Stages', '~> 1.30.0'
 
   # Swift/Objective-C compatibility
   s.pod_target_xcconfig = {

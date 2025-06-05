@@ -44,6 +44,10 @@
       <key>NSAllowsLocalNetworking</key>
       <true/>
     </dict>
+    <key>NSCameraUsageDescription</key>
+    <string>This app uses the camera to allow you to broadcast video.</string>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>This app uses the microphone to allow you to broadcast audio.</string>
     <key>UILaunchStoryboardName</key>
     <string>SplashScreen</string>
     <key>UIRequiredDeviceCapabilities</key>
