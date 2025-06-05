@@ -37,7 +37,7 @@ import {
 const { width } = Dimensions.get('window');
 
 export default function App() {
-  const [token, setToken] = useState<string>('eyJhbGciOiJLTVMiLCJ0eXAiOiJKV1QifQ.eyJleHAiOjE3NDkxODE1MDksImlhdCI6MTc0OTEzODMwOSwianRpIjoiU2hLTTV3WE9kTnRiIiwicmVzb3VyY2UiOiJhcm46YXdzOml2czphcC1ub3J0aGVhc3QtMTo1MzY3MTQxOTc5ODI6c3RhZ2UvTnNtNnVVWEd5SG5pIiwidG9waWMiOiJOc202dVVYR3lIbmkiLCJldmVudHNfdXJsIjoid3NzOi8vZ2xvYmFsLmV2ZW50cy5saXZlLXZpZGVvLm5ldCIsIndoaXBfdXJsIjoiaHR0cHM6Ly8xNzAyNjc3YTU1ODYuZ2xvYmFsLWJtLndoaXAubGl2ZS12aWRlby5uZXQiLCJjYXBhYmlsaXRpZXMiOnsiYWxsb3dfcHVibGlzaCI6dHJ1ZSwiYWxsb3dfc3Vic2NyaWJlIjp0cnVlfSwidmVyc2lvbiI6IjAuMCJ9.MGYCMQDV3mqJ7Tnv48zooJpx1easgFTxhTWg6hip5IlxpyQiNaqyMpDTu9iddD0w0-prl7UCMQDB8yQtaqJgQk5Dww7CPMr_3Kpr4Xfl485lAyxBcRNbp-db5qRq5JmMmz4GODIVZag'); // Store your IVS Stage token here
+  const [token, setToken] = useState<string>(''); // Store your IVS Stage token here
   const [isPublished, setIsPublished] = useState<boolean>(false);
   const [isMuted, setIsMuted] = useState<boolean>(false);
   const [mirrorView, setMirrorView] = useState<boolean>(false);
