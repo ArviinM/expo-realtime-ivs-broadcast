@@ -1,0 +1,10 @@
+{
+  "extends": "expo/tsconfig.base",
+  "compilerOptions": {
+    "strict": true,
+    "paths": {
+      "expo-realtime-ivs-broadcast": ["../src/index"],
+      "expo-realtime-ivs-broadcast/*": ["../src/*"]
+    }
+  }
+}

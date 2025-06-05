@@ -1,0 +1,9 @@
+{
+  "platforms": ["apple", "android", "web"],
+  "apple": {
+    "modules": ["ExpoRealtimeIvsBroadcastModule"]
+  },
+  "android": {
+    "modules": ["expo.modules.realtimeivsbroadcast.ExpoRealtimeIvsBroadcastModule"]
+  }
+}
