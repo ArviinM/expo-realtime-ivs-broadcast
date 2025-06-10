@@ -88,8 +88,6 @@ export type ExpoIVSStagePreviewViewProps = {
   style?: StyleProp<ViewStyle>;
   mirror?: boolean;
   scaleMode?: 'fit' | 'fill'; // As per plan
-  // Remove old: url: string;
-  // Remove old: onLoad: (event: { nativeEvent: OnLoadEventPayload }) => void;
 };
 
 // Props for the new remote stream view
@@ -99,6 +97,3 @@ export type ExpoIVSRemoteStreamViewProps = {
   deviceUrn: string;
   scaleMode?: 'fit' | 'fill';
 };
-
-// Remove unused old types if any (OnLoadEventPayload, ChangeEventPayload)
-// It's cleaner to just define what we need.

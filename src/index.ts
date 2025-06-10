@@ -53,10 +53,6 @@ export async function requestPermissions(): Promise<PermissionStatusMap> {
   return await ExpoRealtimeIvsBroadcastModule.requestPermissions();
 }
 
-export async function triggerRemoteStreamTest(): Promise<void> {
-  return await ExpoRealtimeIvsBroadcastModule.triggerRemoteStreamTest();
-}
-
 // --- Event Emitter ---
 export function addOnStageConnectionStateChangedListener(
   listener: (event: StageConnectionStatePayload) => void

@@ -34,13 +34,12 @@ import {
   addOnCameraSwapErrorListener,
   CameraSwappedPayload,
   CameraSwapErrorPayload,
-  triggerRemoteStreamTest
 } from 'expo-realtime-ivs-broadcast';
 
 const { width } = Dimensions.get('window');
 
 export default function App() {
-  const [token, setToken] = useState<string>('eyJhbGciOiJLTVMiLCJ0eXAiOiJKV1QifQ.eyJleHAiOjE3NDk2MDc4NjIsImlhdCI6MTc0OTU2NDY2MiwianRpIjoicHc3MEwxNEkzUTl1IiwicmVzb3VyY2UiOiJhcm46YXdzOml2czphcC1zb3V0aC0xOjQ4MDYwOTMzMTcwNjpzdGFnZS9OQkZKb0plQ2l0ZGkiLCJ0b3BpYyI6Ik5CRkpvSmVDaXRkaSIsImV2ZW50c191cmwiOiJ3c3M6Ly9nbG9iYWwuZXZlbnRzLmxpdmUtdmlkZW8ubmV0Iiwid2hpcF91cmwiOiJodHRwczovL2I0NTg2OTFkMjBjOS5nbG9iYWwtYm0ud2hpcC5saXZlLXZpZGVvLm5ldCIsImNhcGFiaWxpdGllcyI6eyJhbGxvd19zdWJzY3JpYmUiOnRydWV9LCJ2ZXJzaW9uIjoiMC4wIn0.MGQCMEQdKfgdl3BvDBneSdw8i9NV51LjyF1ps8Sa1e4JKKBj2qSXRMPcIDLRFvSjqfAoCwIwTf4v0ujjwojRKPQKpSvNPzSkhXWWQIZkMdN9gSQl-4y0a14vPDTVw2hIzE0RnWn7'); // Store your IVS Stage token here
+  const [token, setToken] = useState<string>(''); // Store your IVS Stage token here
   const [isPublished, setIsPublished] = useState<boolean>(false);
   const [isMuted, setIsMuted] = useState<boolean>(false);
   const [mirrorView, setMirrorView] = useState<boolean>(false);
@@ -54,15 +53,6 @@ export default function App() {
 
   // Use the new hook to get participant data
   const { participants } = useStageParticipants();
-
-  const handleTestRender = async () => {
-    try {
-      console.log('--- Triggering Force Render Test ---');
-      await triggerRemoteStreamTest();
-    } catch (e) {
-      console.error('Test render error:', e);
-    }
-  };
 
   useEffect(() => {
     // Log participant data whenever it changes, for debugging purposes.
@@ -221,11 +211,6 @@ export default function App() {
               <Button title={mirrorView ? "Unmirror" : "Mirror"} onPress={toggleMirror} />
               <Button title={`Scale: ${scaleMode}`} onPress={toggleScaleMode} />
           </View>
-        </View>
-
-        <View style={styles.group}>
-          <Text style={styles.groupHeader}>!! DEBUG !!</Text>
-          <Button title="Force Render Test" onPress={handleTestRender} color="red" />
         </View>
 
         <View style={styles.group}>

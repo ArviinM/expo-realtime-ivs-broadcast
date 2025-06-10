@@ -18,7 +18,6 @@ export type ExpoRealtimeIvsBroadcastModuleType = {
     listener: (event: Parameters<ExpoRealtimeIvsBroadcastModuleEvents[EventName]>[0]) => void
   ): EventSubscription;
   removeListeners(count: number): void;
-  triggerRemoteStreamTest(): Promise<void>;
 };
 
 const ExpoModule: ExpoRealtimeIvsBroadcastModuleType = requireNativeModule('ExpoRealtimeIvsBroadcast');
