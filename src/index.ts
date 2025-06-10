@@ -9,13 +9,20 @@ import {
     StageErrorPayload,
     CameraSwappedPayload,
     CameraSwapErrorPayload,
+    ParticipantPayload,
+    ParticipantStreamsPayload,
+    ParticipantStreamsRemovedPayload,
 } from './ExpoRealtimeIvsBroadcast.types';
 
 // Re-export all type definitions
 export * from './ExpoRealtimeIvsBroadcast.types';
 
-// Export the native view component
+// Export the native view components
 export { IVSStagePreviewView } from './ExpoRealtimeIvsBroadcastView';
+export { IVSRemoteStreamView } from './ExpoIVSRemoteStreamView';
+
+// Export the custom hook
+export { useStageParticipants } from './useStageParticipants';
 
 // --- Native Module Methods ---
 export async function initialize(audioConfig?: LocalAudioConfig, videoConfig?: LocalVideoConfig): Promise<void> {
@@ -78,13 +85,25 @@ export function addOnCameraSwapErrorListener(
 }
 
 export function addOnParticipantJoinedListener(
-  listener: (event: { participantId: string }) => void
+  listener: (event: ParticipantPayload) => void
 ): EventSubscription {
   return ExpoRealtimeIvsBroadcastModule.addListener('onParticipantJoined', listener);
 }
 
 export function addOnParticipantLeftListener(
-  listener: (event: { participantId: string }) => void
+  listener: (event: ParticipantPayload) => void
 ): EventSubscription {
   return ExpoRealtimeIvsBroadcastModule.addListener('onParticipantLeft', listener);
+}
+
+export function addOnParticipantStreamsAddedListener(
+  listener: (event: ParticipantStreamsPayload) => void
+): EventSubscription {
+  return ExpoRealtimeIvsBroadcastModule.addListener('onParticipantStreamsAdded', listener);
+}
+
+export function addOnParticipantStreamsRemovedListener(
+  listener: (event: ParticipantStreamsRemovedPayload) => void
+): EventSubscription {
+  return ExpoRealtimeIvsBroadcastModule.addListener('onParticipantStreamsRemoved', listener);
 }

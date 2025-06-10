@@ -13,6 +13,8 @@ import {
 } from 'react-native';
 import {
   IVSStagePreviewView,
+  IVSRemoteStreamView,
+  useStageParticipants,
   initialize,
   joinStage,
   leaveStage,
@@ -32,12 +34,12 @@ import {
   addOnCameraSwapErrorListener,
   CameraSwappedPayload,
   CameraSwapErrorPayload,
-} from 'expo-realtime-ivs-broadcast'; // Assuming your library is correctly linked
+} from 'expo-realtime-ivs-broadcast';
 
 const { width } = Dimensions.get('window');
 
 export default function App() {
-  const [token, setToken] = useState<string>(''); // Store your IVS Stage token here
+  const [token, setToken] = useState<string>('eyJhbGciOiJLTVMiLCJ0eXAiOiJKV1QifQ.eyJleHAiOjE3NDk1NjQ1NTMsImlhdCI6MTc0OTUyMTM1MywianRpIjoieTBZUldYUjdoWjFtIiwicmVzb3VyY2UiOiJhcm46YXdzOml2czphcC1zb3V0aC0xOjQ4MDYwOTMzMTcwNjpzdGFnZS9OQkZKb0plQ2l0ZGkiLCJ0b3BpYyI6Ik5CRkpvSmVDaXRkaSIsImV2ZW50c191cmwiOiJ3c3M6Ly9nbG9iYWwuZXZlbnRzLmxpdmUtdmlkZW8ubmV0Iiwid2hpcF91cmwiOiJodHRwczovL2I0NTg2OTFkMjBjOS5nbG9iYWwtYm0ud2hpcC5saXZlLXZpZGVvLm5ldCIsImNhcGFiaWxpdGllcyI6eyJhbGxvd19wdWJsaXNoIjp0cnVlLCJhbGxvd19zdWJzY3JpYmUiOnRydWV9LCJ2ZXJzaW9uIjoiMC4wIn0.MGQCMEuxE6uf_MeSCNvBH312nJ7Daf046_j37sVFqUTJFyALoK9CuLMr84y4bHjl3V-QBwIwc5j__hvYD0QP1cEk2CZqFzpSPNVAnH4rPGZLa8hA0Xoep8hBKSkZm-mGDTALWhAv'); // Store your IVS Stage token here
   const [isPublished, setIsPublished] = useState<boolean>(false);
   const [isMuted, setIsMuted] = useState<boolean>(false);
   const [mirrorView, setMirrorView] = useState<boolean>(false);
@@ -48,6 +50,14 @@ export default function App() {
   const [lastError, setLastError] = useState<StageErrorPayload | null>(null);
   const [permissionStatus, setPermissionStatus] = useState<PermissionStatusMap | null>(null);
   const [lastSwapResult, setLastSwapResult] = useState<string | null>(null);
+
+  // Use the new hook to get participant data
+  const { participants } = useStageParticipants();
+
+  useEffect(() => {
+    // Log participant data whenever it changes, for debugging purposes.
+    console.log('Participants updated:', JSON.stringify(participants, null, 2));
+  }, [participants]);
 
   useEffect(() => {
     const connectionSub = addOnStageConnectionStateChangedListener((data) => {
@@ -186,18 +196,58 @@ export default function App() {
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContentContainer}>
-        <Text style={styles.header}>IVS Real-Time Broadcaster</Text>
+        <Text style={styles.header}>IVS Real-Time Demo</Text>
 
-        <View style={styles.previewContainer}>
-          <IVSStagePreviewView 
-            style={styles.preview} 
-            mirror={mirrorView}
-            scaleMode={scaleMode}
-          />
+        <View style={styles.group}>
+          <Text style={styles.groupHeader}>My Preview</Text>
+          <View style={styles.previewContainer}>
+            <IVSStagePreviewView 
+              style={styles.preview} 
+              mirror={mirrorView}
+              scaleMode={scaleMode}
+            />
+          </View>
+          <View style={styles.controlsRow}>
+              <Button title={mirrorView ? "Unmirror" : "Mirror"} onPress={toggleMirror} />
+              <Button title={`Scale: ${scaleMode}`} onPress={toggleScaleMode} />
+          </View>
         </View>
-        <View style={styles.controlsRow}>
-            <Button title={mirrorView ? "Unmirror" : "Mirror"} onPress={toggleMirror} />
-            <Button title={`Scale: ${scaleMode}`} onPress={toggleScaleMode} />
+
+        <View style={styles.group}>
+          <Text style={styles.groupHeader}>Remote Participants ({participants.length})</Text>
+          {participants.length === 0 ? (
+            <Text>No one else has joined the stage.</Text>
+          ) : (
+            <ScrollView horizontal style={styles.remoteStreamsContainer}>
+              {participants.map(p => {
+                // Find the video stream for the participant
+                const videoStream = p.streams.find(s => s.mediaType === 'video');
+                
+                // If there's no video stream, render a placeholder
+                if (!videoStream) {
+                  return (
+                    <View key={p.id} style={styles.remoteStreamPlaceholder}>
+                      <Text style={styles.remoteStreamText}>{(p.id || '...').substring(0, 8)}</Text>
+                      <Text style={styles.remoteStreamText}>(No Video)</Text>
+                    </View>
+                  );
+                }
+                
+                // Render the remote participant's view
+                return (
+                  <View key={p.id} style={styles.remoteStreamWrapper}>
+                     <IVSRemoteStreamView
+                      style={styles.remoteStream}
+                      participantId={p.id}
+                      deviceUrn={videoStream.deviceUrn}
+                      scaleMode="fill"
+                    />
+                    <Text style={styles.remoteStreamLabel}>{(p.id || '...').substring(0, 8)}</Text>
+                  </View>
+                );
+              })}
+            </ScrollView>
+          )}
         </View>
 
         <View style={styles.group}>
@@ -265,15 +315,17 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     textAlign: 'center',
     marginVertical: 20,
+    color: '#333'
   },
   previewContainer: {
-    width: width * 0.9,
-    height: width * 0.9 * (16/9), // 16:9 aspect ratio
-    alignSelf: 'center',
+    width: '100%',
+    aspectRatio: 9 / 16, // Portrait aspect ratio
     backgroundColor: '#000',
     marginBottom: 10,
+    borderRadius: 8,
+    overflow: 'hidden',
     borderWidth: 1,
-    borderColor: 'grey'
+    borderColor: '#ddd'
   },
   preview: {
     flex: 1,
@@ -312,5 +364,51 @@ const styles = StyleSheet.create({
     padding: 10,
     marginBottom: 10,
     fontSize: 16,
+  },
+  remoteStreamsContainer: {
+    paddingVertical: 10,
+  },
+  remoteStreamWrapper: {
+    width: 120,
+    height: 120 * (16 / 9),
+    backgroundColor: '#2e2e2e',
+    marginRight: 10,
+    borderRadius: 8,
+    overflow: 'hidden',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#444',
+  },
+  remoteStream: {
+    width: '100%',
+    height: '100%',
+  },
+  remoteStreamLabel: {
+    position: 'absolute',
+    bottom: 5,
+    left: 5,
+    color: 'white',
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+    borderRadius: 4,
+    fontSize: 10,
+    fontWeight: 'bold',
+  },
+  remoteStreamPlaceholder: {
+    width: 120,
+    height: 120 * (16 / 9),
+    backgroundColor: '#3e3e3e',
+    marginRight: 10,
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 5,
+  },
+  remoteStreamText: {
+    color: '#b0b0b0',
+    fontSize: 12,
+    textAlign: 'center',
   },
 });

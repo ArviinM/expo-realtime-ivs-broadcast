@@ -54,7 +54,7 @@ class ExpoIVSStagePreviewView: ExpoView {
             return
         }
         self.stageManager = module.ivsStageManager
-        attachStream() 
+        attachStream()
     }
     
     func attachStream() {

@@ -15,7 +15,7 @@ public class ExpoRealtimeIvsBroadcastModule: Module, IVSStageManagerDelegate {
     // The module will be accessible from `requireNativeModule('ExpoRealtimeIvsBroadcast')` in JavaScript.
     Name("ExpoRealtimeIvsBroadcast")
     // Defines event names that the module can send to JavaScript.
-    Events("onStageConnectionStateChanged", "onPublishStateChanged", "onStageError", "onCameraSwapped", "onCameraSwapError", "onParticipantJoined", "onParticipantLeft")
+    Events("onStageConnectionStateChanged", "onPublishStateChanged", "onStageError", "onCameraSwapped", "onCameraSwapError", "onParticipantJoined", "onParticipantLeft", "onParticipantStreamsAdded", "onParticipantStreamsRemoved")
 
     // Initialize the IVSStageManager when the module is created
     // and set self as its delegate.
@@ -84,6 +84,19 @@ public class ExpoRealtimeIvsBroadcastModule: Module, IVSStageManagerDelegate {
       }
 
       Prop("scaleMode") { (view: ExpoIVSStagePreviewView, scaleMode: String) in // "fit" or "fill"
+        view.scaleMode = scaleMode
+      }
+    }
+
+    // Expose the custom view for remote stream rendering
+    View(ExpoIVSRemoteStreamView.self) {
+      Prop("participantId") { (view: ExpoIVSRemoteStreamView, participantId: String?) in
+        view.participantId = participantId
+      }
+      Prop("deviceUrn") { (view: ExpoIVSRemoteStreamView, deviceUrn: String?) in
+        view.deviceUrn = deviceUrn
+      }
+      Prop("scaleMode") { (view: ExpoIVSRemoteStreamView, scaleMode: String) in
         view.scaleMode = scaleMode
       }
     }

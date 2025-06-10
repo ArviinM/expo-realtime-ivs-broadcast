@@ -2,6 +2,17 @@ import ExpoModulesCore
 import AmazonIVSBroadcast
 import AVFoundation // For AVAudioSession
 
+// A class to hold the combined state for a single participant
+class StageParticipant {
+    let info: IVSParticipantInfo
+    var streams: [IVSStageStream]
+
+    init(info: IVSParticipantInfo) {
+        self.info = info
+        self.streams = [] // Starts with no streams
+    }
+}
+
 // Define the delegate protocol for event emission
 protocol IVSStageManagerDelegate: AnyObject {
     func stageManagerDidEmitEvent(eventName: String, body: [String: Any]?)
@@ -24,6 +35,9 @@ class IVSStageManager: NSObject, IVSStageStreamDelegate, IVSStageStrategy, IVSSt
     weak var delegate: IVSStageManagerDelegate?
 
     private var isPublishingActive: Bool = false // Added state for desired publishing status
+
+    // To maintain a queryable list of participants using our custom class
+    private var participants: [StageParticipant] = []
 
     // MARK: - Initialization
 
@@ -146,7 +160,7 @@ class IVSStageManager: NSObject, IVSStageStreamDelegate, IVSStageStrategy, IVSSt
             try self.stage?.join()
             print("IVSStage join() method called. Connection status will be updated via delegate methods.")
             // Successfully initiated join, now set publishing to active and refresh strategy
-            self.setStreamsPublished(published: true)
+//            self.setStreamsPublished(published: true)
         } catch {
             print("Error attempting to join IVSStage: \(error)")
             let nsError = error as NSError
@@ -165,8 +179,8 @@ class IVSStageManager: NSObject, IVSStageStreamDelegate, IVSStageStrategy, IVSSt
             // has been processed if there are race conditions, but typically it should be fine.
             // For robustness, one could use a short delay or a completion handler if refreshStrategy had one.
 
-            stage?.leave()
-            print("Left stage.")
+        stage?.leave()
+        print("Left stage.")
             // Consider nil-ing out stage and streams here or in a disconnected delegate callback
             // self.stage = nil
             // self.cameraStream = nil
@@ -248,16 +262,11 @@ class IVSStageManager: NSObject, IVSStageStreamDelegate, IVSStageStrategy, IVSSt
         // 4. Update the manager's properties
         self.cameraStream = newLocalCameraStream
         self.currentCameraDevice = newCamera // newCamera is already an IVSDevice, no need to cast from IVSCamera again here
+        // 5. Tell the stage to re-evaluate its strategy with the new camera stream
+        self.stage?.refreshStrategy()
 
         print("IVSStageManager: Camera swapped successfully to \(newCamera.descriptor().friendlyName).")
         delegate?.stageManagerDidEmitEvent(eventName: "onCameraSwapped", body: ["newCameraURN": newCamera.descriptor().urn, "newCameraName": newCamera.descriptor().friendlyName])
-
-
-        // 5. Refresh strategy if currently publishing, so stage picks up the new stream
-        if self.isPublishingActive {
-            print("IVSStageManager: Publishing was active. Refreshing stage strategy for new camera stream.")
-            self.stage?.refreshStrategy()
-        }
     }
 
     func setMicrophoneMuted(muted: Bool) {
@@ -270,6 +279,23 @@ class IVSStageManager: NSObject, IVSStageStreamDelegate, IVSStageStrategy, IVSSt
         return self.cameraStream
     }
     
+    public func findStream(forParticipantId participantId: String, deviceUrn: String) -> IVSStageStream? {
+        // 1. Find the StageParticipant object
+        guard let participant = self.participants.first(where: { $0.info.participantId == participantId }) else {
+            print("IVSStageManager.findStream: Participant with ID \(participantId) not found.")
+            return nil
+        }
+        
+        // 2. Search the streams array of that found object
+        guard let stream = participant.streams.first(where: { $0.device.descriptor().urn == deviceUrn }) else {
+            print("IVSStageManager.findStream: Stream with URN \(deviceUrn) not found for participant \(participantId).")
+            return nil
+        }
+        
+        print("IVSStageManager.findStream: Successfully found stream for participant \(participantId) with URN \(deviceUrn).")
+        return stream
+    }
+
     func getCameraPreview() -> UIView? {
         // This is a simplified way, assuming the camera stream is available
         // and you have a way to render it directly or via the ExpoIVSStagePreviewView
@@ -375,6 +401,7 @@ extension IVSStageManager: IVSErrorDelegate {
         print("IVS SDK Error: \(error.localizedDescription) from source: \(source)")
         let nsError = error as NSError
         var isFatal = false
+
         // TODO: Get stage error
 //        if let stageError = error as? IVSStageError, stageError.isFatal() {
 //            isFatal = true
@@ -432,6 +459,7 @@ extension IVSStageManager {
         if connectionState == .disconnected {
             self.isPublishingActive = false
             self.stage = nil
+            self.participants.removeAll()
         }
     }
     
@@ -455,20 +483,93 @@ extension IVSStageManager {
 
     func stage(_ stage: IVSStage, participantDidJoin participant: IVSParticipantInfo) {
         print("IVSStageManager Renderer: Participant joined: \(participant.participantId ?? "N/A")")
+        // This gives you the participantId
+        print("✅ [DEBUG] Participant Joined - ID: \(participant.participantId ?? "N/A")")
+        
+        // Also print their stable ID if you implemented attributes
+        print("✅ [DEBUG] Participant Attributes: \(participant.attributes)")
+        
+        // Create a new StageParticipant and add it to our array
+        let newParticipant = StageParticipant(info: participant)
+        self.participants.append(newParticipant)
+        
         delegate?.stageManagerDidEmitEvent(eventName: "onParticipantJoined", body: ["participantId": participant.participantId ?? ""])
     }
 
     func stage(_ stage: IVSStage, participantDidLeave participant: IVSParticipantInfo) {
         print("IVSStageManager Renderer: Participant left: \(participant.participantId ?? "N/A")")
+        self.participants.removeAll { $0.info.participantId == participant.participantId }
         delegate?.stageManagerDidEmitEvent(eventName: "onParticipantLeft", body: ["participantId": participant.participantId ?? ""])
     }
 
     func stage(_ stage: IVSStage, participant: IVSParticipantInfo, didAdd streams: [IVSStageStream]) {
         print("IVSStageManager Renderer: Participant \(participant.participantId ?? "N/A") added \(streams.count) streams.")
+        print("✅ [DEBUG] Participant \(participant.participantId ?? "N/A") added \(streams.count) streams.")
+
+        // Loop through the streams to get each deviceUrn
+        for stream in streams {
+            print("✅ [DEBUG]   -> Stream Added - Device URN: \(stream.device.descriptor().urn)")
+        }
+
+        // Find the corresponding StageParticipant and add the streams
+        if let existingParticipant = self.participants.first(where: { $0.info.participantId == participant.participantId }) {
+            existingParticipant.streams.append(contentsOf: streams)
+        } else {
+            print("IVSStageManager: Received streams for a participant not in our list: \(participant.participantId ?? "N/A")")
+            // This can happen if the stream-add event arrives before the join event.
+            // Let's create the participant here to be safe.
+            let newParticipant = StageParticipant(info: participant)
+            newParticipant.streams.append(contentsOf: streams)
+            self.participants.append(newParticipant)
+        }
+
+        let streamDicts = streams.map { stream -> [String: Any] in
+            print("✅ [DEBUG] Steam Device Type: \(stream.device.descriptor().type)")
+            var mediaType: String
+            switch stream.device.descriptor().type {
+            case IVSDeviceType(rawValue: 5):
+                mediaType = "video"
+            case IVSDeviceType(rawValue: 6):
+                mediaType = "audio"
+            default:
+                mediaType = "unknown"
+            }
+            return [
+                "deviceUrn": stream.device.descriptor().urn,
+                "mediaType": mediaType
+            ]
+        }
+
+        let body: [String: Any] = [
+            "participantId": participant.participantId ?? "",
+            "streams": streamDicts
+        ]
+        
+        delegate?.stageManagerDidEmitEvent(eventName: "onParticipantStreamsAdded", body: body)
     }
 
     func stage(_ stage: IVSStage, participant: IVSParticipantInfo, didRemove streams: [IVSStageStream]) {
         print("IVSStageManager Renderer: Participant \(participant.participantId ?? "N/A") removed \(streams.count) streams.")
+
+        // Find the participant and remove the streams from their list
+        if let existingParticipant = self.participants.first(where: { $0.info.participantId == participant.participantId }) {
+            let removedUrns = streams.map { $0.device.descriptor().urn }
+            existingParticipant.streams.removeAll { removedUrns.contains($0.device.descriptor().urn) }
+        }
+
+        let streamDicts = streams.map { stream -> [String: Any] in
+            return [
+                "deviceUrn": stream.device.descriptor().urn
+            ]
+        }
+        
+        let body: [String: Any] = [
+            "participantId": participant.participantId ?? "",
+            "streams": streamDicts
+        ]
+        
+        print("✅ [DEBUG] Body: \(body)")
+        delegate?.stageManagerDidEmitEvent(eventName: "onParticipantStreamsRemoved", body: body)
     }
     
     func stage(_ stage: IVSStage, participant: IVSParticipantInfo, didChangeMutedStreams streams: [IVSStageStream]) {
@@ -480,3 +581,12 @@ extension IVSStageManager {
 // Further delegate methods from IVSStage (if it has a primary delegate for connection/publish states beyond join)
 // would be implemented here. The current IVS SDK for Stage might rely more on completion handlers
 // and direct state checking for some of these, or specific delegates for participants/streams. 
+
+// MARK: - IVSStageStreamDelegate
+extension IVSStageManager {
+    func stream(_ stream: IVSStageStream, didChangeMuted muted: Bool) {
+        // This is for local streams we manage.
+        // We could emit an event if JS needs to know our own mute state changed.
+        print("IVSStageManager: Stream \(stream.device.descriptor().urn) mute state changed to \(muted)")
+    }
+}

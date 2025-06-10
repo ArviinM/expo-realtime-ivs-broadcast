@@ -43,13 +43,42 @@ export interface CameraSwapErrorPayload {
   reason: string;
 }
 
+// As per plan
+export interface StageStream {
+  deviceUrn: string;
+  mediaType: 'video' | 'audio' | 'unknown';
+}
+
+export interface Participant {
+  id: string;
+  streams: StageStream[];
+}
+
+// Payloads for participant events
+export interface ParticipantPayload {
+  participantId: string;
+}
+
+export interface ParticipantStreamsPayload {
+  participantId: string;
+  streams: StageStream[];
+}
+
+export interface ParticipantStreamsRemovedPayload {
+  participantId: string;
+  // On removal, we only get the URNs back from the native side
+  streams: { deviceUrn: string }[];
+}
+
 // Defines the events that the native module can emit
 export type ExpoRealtimeIvsBroadcastModuleEvents = {
   onStageConnectionStateChanged: (payload: StageConnectionStatePayload) => void;
   onPublishStateChanged: (payload: PublishStatePayload) => void;
   onStageError: (payload: StageErrorPayload) => void;
-  onParticipantJoined: (payload: { participantId: string }) => void;
-  onParticipantLeft: (payload: { participantId: string }) => void;
+  onParticipantJoined: (payload: ParticipantPayload) => void;
+  onParticipantLeft: (payload: ParticipantPayload) => void;
+  onParticipantStreamsAdded: (payload: ParticipantStreamsPayload) => void;
+  onParticipantStreamsRemoved: (payload: ParticipantStreamsRemovedPayload) => void;
   onCameraSwapped: (payload: CameraSwappedPayload) => void;
   onCameraSwapError: (payload: CameraSwapErrorPayload) => void;
 };
@@ -61,6 +90,14 @@ export type ExpoRealtimeIvsBroadcastViewProps = {
   scaleMode?: 'fit' | 'fill'; // As per plan
   // Remove old: url: string;
   // Remove old: onLoad: (event: { nativeEvent: OnLoadEventPayload }) => void;
+};
+
+// Props for the new remote stream view
+export type ExpoIVSRemoteStreamViewProps = {
+  style?: StyleProp<ViewStyle>;
+  participantId: string;
+  deviceUrn: string;
+  scaleMode?: 'fit' | 'fill';
 };
 
 // Remove unused old types if any (OnLoadEventPayload, ChangeEventPayload)
