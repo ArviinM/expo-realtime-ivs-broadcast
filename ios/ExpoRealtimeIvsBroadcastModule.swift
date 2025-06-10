@@ -90,15 +90,18 @@ public class ExpoRealtimeIvsBroadcastModule: Module, IVSStageManagerDelegate {
 
     // Expose the custom view for remote stream rendering
     View(ExpoIVSRemoteStreamView.self) {
-      Prop("participantId") { (view: ExpoIVSRemoteStreamView, participantId: String?) in
-        view.participantId = participantId
-      }
-      Prop("deviceUrn") { (view: ExpoIVSRemoteStreamView, deviceUrn: String?) in
-        view.deviceUrn = deviceUrn
-      }
-      Prop("scaleMode") { (view: ExpoIVSRemoteStreamView, scaleMode: String) in
-        view.scaleMode = scaleMode
-      }
+        Prop("participantId") { (view: ExpoIVSRemoteStreamView, participantId: String?) in
+            print("DEBUG: Setting remote stream participantId to \(String(describing: participantId))")
+            view.participantId = participantId
+        }
+        Prop("deviceUrn") { (view: ExpoIVSRemoteStreamView, deviceUrn: String?) in
+            print("DEBUG: Setting remote stream deviceUrn to \(String(describing: deviceUrn))")
+          view.deviceUrn = deviceUrn
+        }
+        Prop("scaleMode") { (view: ExpoIVSRemoteStreamView, scaleMode: String?) in
+            print("DEBUG: Setting remote stream scaleMode to \(String(describing: scaleMode))")
+            view.scaleMode = scaleMode ?? "fit"
+        }
     }
 
     // Cleanup when the module is destroyed

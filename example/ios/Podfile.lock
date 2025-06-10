@@ -1980,7 +1980,7 @@ SPEC CHECKSUMS:
   ExpoFont: abbb91a911eb961652c2b0a22eef801860425ed6
   ExpoKeepAwake: bf0811570c8da182bfb879169437d4de298376e7
   ExpoModulesCore: d431ffe83c8673d02cb38425594a5f5480fd3061
-  ExpoRealtimeIvsBroadcast: 5967b99996f4f84e1a6db324fc986f33d22e17f8
+  ExpoRealtimeIvsBroadcast: 56ca89246b4842e2caafaab0a2364da9853ddd82
   fast_float: 06eeec4fe712a76acc9376682e4808b05ce978b6
   FBLazyVector: a62a7a5760929b6265e27bc01ab7598dde93ebd3
   fmt: a40bb5bd0294ea969aaaba240a927bd33d878cdd

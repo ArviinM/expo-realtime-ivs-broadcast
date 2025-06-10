@@ -18,8 +18,8 @@ import {
 export * from './ExpoRealtimeIvsBroadcast.types';
 
 // Export the native view components
-export { IVSStagePreviewView } from './ExpoRealtimeIvsBroadcastView';
-export { IVSRemoteStreamView } from './ExpoIVSRemoteStreamView';
+export { ExpoIVSStagePreviewView } from './ExpoIVSStagePreviewView';
+export { ExpoIVSRemoteStreamView } from './ExpoIVSRemoteStreamView';
 
 // Export the custom hook
 export { useStageParticipants } from './useStageParticipants';

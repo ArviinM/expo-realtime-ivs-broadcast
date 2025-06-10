@@ -280,19 +280,35 @@ class IVSStageManager: NSObject, IVSStageStreamDelegate, IVSStageStrategy, IVSSt
     }
     
     public func findStream(forParticipantId participantId: String, deviceUrn: String) -> IVSStageStream? {
-        // 1. Find the StageParticipant object
-        guard let participant = self.participants.first(where: { $0.info.participantId == participantId }) else {
-            print("IVSStageManager.findStream: Participant with ID \(participantId) not found.")
+        // ADD THIS LOGGING BLOCK
+        print("--------------------------------------------------")
+        print("🔎 [MANAGER] findStream called.")
+        print("🔎 [MANAGER] Searching for participantId: \(participantId)")
+        print("🔎 [MANAGER] Searching for deviceUrn: \(deviceUrn)")
+        
+        // Log the entire current state of our participants array
+        print("🔎 [MANAGER] Current participants in state (\(self.participants.count)):")
+        for p in self.participants {
+            let streamUrns = p.streams.map { $0.device.descriptor().urn }
+            print("  - Participant: \(p.info.participantId ?? "nil"), Streams: \(streamUrns)")
+        }
+        
+        // ... your existing findStream logic ...
+        guard let participantInfo = self.participants.first(where: { $0.info.participantId == participantId }) else {
+            print("❌ [MANAGER] findStream: Participant NOT FOUND.")
+            print("--------------------------------------------------")
             return nil
         }
         
-        // 2. Search the streams array of that found object
-        guard let stream = participant.streams.first(where: { $0.device.descriptor().urn == deviceUrn }) else {
-            print("IVSStageManager.findStream: Stream with URN \(deviceUrn) not found for participant \(participantId).")
+        guard let stream = participantInfo.streams.first(where: { $0.device.descriptor().urn == deviceUrn }) else {
+            print("❌ [MANAGER] findStream: Stream NOT FOUND for participant \(participantId).")
+            print("--------------------------------------------------")
             return nil
         }
         
-        print("IVSStageManager.findStream: Successfully found stream for participant \(participantId) with URN \(deviceUrn).")
+        // ADD THIS LOG
+        print("✅ [MANAGER] findStream: Successfully FOUND stream. URN: \(stream.device.descriptor().urn)")
+        print("--------------------------------------------------")
         return stream
     }
 
@@ -488,8 +504,10 @@ extension IVSStageManager {
         
         // Also print their stable ID if you implemented attributes
         print("✅ [DEBUG] Participant Attributes: \(participant.attributes)")
+
+        if participant.isLocal { return }
         
-        // Create a new StageParticipant and add it to our array
+        // Create our custom participant object to hold state
         let newParticipant = StageParticipant(info: participant)
         self.participants.append(newParticipant)
         
@@ -498,6 +516,8 @@ extension IVSStageManager {
 
     func stage(_ stage: IVSStage, participantDidLeave participant: IVSParticipantInfo) {
         print("IVSStageManager Renderer: Participant left: \(participant.participantId ?? "N/A")")
+        if participant.isLocal { return }
+
         self.participants.removeAll { $0.info.participantId == participant.participantId }
         delegate?.stageManagerDidEmitEvent(eventName: "onParticipantLeft", body: ["participantId": participant.participantId ?? ""])
     }
@@ -510,6 +530,8 @@ extension IVSStageManager {
         for stream in streams {
             print("✅ [DEBUG]   -> Stream Added - Device URN: \(stream.device.descriptor().urn)")
         }
+
+        if participant.isLocal { return }
 
         // Find the corresponding StageParticipant and add the streams
         if let existingParticipant = self.participants.first(where: { $0.info.participantId == participant.participantId }) {
@@ -551,6 +573,8 @@ extension IVSStageManager {
     func stage(_ stage: IVSStage, participant: IVSParticipantInfo, didRemove streams: [IVSStageStream]) {
         print("IVSStageManager Renderer: Participant \(participant.participantId ?? "N/A") removed \(streams.count) streams.")
 
+        if participant.isLocal { return }
+
         // Find the participant and remove the streams from their list
         if let existingParticipant = self.participants.first(where: { $0.info.participantId == participant.participantId }) {
             let removedUrns = streams.map { $0.device.descriptor().urn }
@@ -573,6 +597,7 @@ extension IVSStageManager {
     }
     
     func stage(_ stage: IVSStage, participant: IVSParticipantInfo, didChangeMutedStreams streams: [IVSStageStream]) {
+        if participant.isLocal { return }
         // This is useful for knowing if a remote participant muted.
         // We can emit an event for this if needed.
     }

@@ -84,7 +84,7 @@ export type ExpoRealtimeIvsBroadcastModuleEvents = {
 };
 
 // Props for the ExpoIVSStagePreviewView component
-export type ExpoRealtimeIvsBroadcastViewProps = {
+export type ExpoIVSStagePreviewViewProps = {
   style?: StyleProp<ViewStyle>;
   mirror?: boolean;
   scaleMode?: 'fit' | 'fill'; // As per plan

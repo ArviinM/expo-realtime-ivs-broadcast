@@ -12,8 +12,8 @@ import {
   Dimensions
 } from 'react-native';
 import {
-  IVSStagePreviewView,
-  IVSRemoteStreamView,
+  ExpoIVSStagePreviewView,
+  ExpoIVSRemoteStreamView,
   useStageParticipants,
   initialize,
   joinStage,
@@ -26,7 +26,7 @@ import {
   PublishStatePayload,
   StageErrorPayload,
   PermissionStatusMap,
-  ExpoRealtimeIvsBroadcastViewProps, // For scaleMode and mirror type
+  ExpoIVSStagePreviewViewProps, // For scaleMode and mirror type
   addOnStageConnectionStateChangedListener,
   addOnPublishStateChangedListener,
   addOnStageErrorListener,
@@ -43,7 +43,7 @@ export default function App() {
   const [isPublished, setIsPublished] = useState<boolean>(false);
   const [isMuted, setIsMuted] = useState<boolean>(false);
   const [mirrorView, setMirrorView] = useState<boolean>(false);
-  const [scaleMode, setScaleMode] = useState<ExpoRealtimeIvsBroadcastViewProps['scaleMode']>('fill');
+  const [scaleMode, setScaleMode] = useState<ExpoIVSStagePreviewViewProps['scaleMode']>('fill');
 
   const [connectionState, setConnectionState] = useState<StageConnectionStatePayload | null>(null);
   const [publishState, setPublishState] = useState<PublishStatePayload | null>(null);
@@ -201,7 +201,7 @@ export default function App() {
         <View style={styles.group}>
           <Text style={styles.groupHeader}>My Preview</Text>
           <View style={styles.previewContainer}>
-            <IVSStagePreviewView 
+            <ExpoIVSStagePreviewView 
               style={styles.preview} 
               mirror={mirrorView}
               scaleMode={scaleMode}
@@ -223,25 +223,24 @@ export default function App() {
                 // Find the video stream for the participant
                 const videoStream = p.streams.find(s => s.mediaType === 'video');
                 
-                // If there's no video stream, render a placeholder
-                if (!videoStream) {
-                  return (
-                    <View key={p.id} style={styles.remoteStreamPlaceholder}>
-                      <Text style={styles.remoteStreamText}>{(p.id || '...').substring(0, 8)}</Text>
-                      <Text style={styles.remoteStreamText}>(No Video)</Text>
-                    </View>
-                  );
-                }
-                
-                // Render the remote participant's view
+                // By changing the key when the video stream becomes available,
+                // we force React to create a new component instead of updating the old one.
+                // This is the definitive fix for the props-not-updating issue.
                 return (
-                  <View key={p.id} style={styles.remoteStreamWrapper}>
-                     <IVSRemoteStreamView
-                      style={styles.remoteStream}
-                      participantId={p.id}
-                      deviceUrn={videoStream.deviceUrn}
-                      scaleMode="fill"
-                    />
+                  <View key={p.id + (videoStream?.deviceUrn ?? '')} style={styles.remoteStreamWrapper}>
+                    {videoStream ? (
+                      <ExpoIVSRemoteStreamView
+                        style={styles.remoteStream}
+                        participantId={p.id}
+                        deviceUrn={videoStream.deviceUrn}
+                        scaleMode="fill"
+                      />
+                    ) : (
+                      <View style={styles.remoteStreamPlaceholder}>
+                        <Text style={styles.remoteStreamText}>{(p.id || '...').substring(0, 8)}</Text>
+                        <Text style={styles.remoteStreamText}>(No Video)</Text>
+                      </View>
+                    )}
                     <Text style={styles.remoteStreamLabel}>{(p.id || '...').substring(0, 8)}</Text>
                   </View>
                 );

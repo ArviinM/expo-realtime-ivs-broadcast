@@ -1,15 +1,12 @@
-import { requireNativeViewManager } from 'expo-modules-core';
 import * as React from 'react';
-
 import { ExpoIVSRemoteStreamViewProps } from './ExpoRealtimeIvsBroadcast.types';
+import { requireNativeViewManager } from 'expo-modules-core';
 
-const NativeExpoIVSRemoteStreamView: React.ComponentType<ExpoIVSRemoteStreamViewProps> =
+// The name of this React component MUST EXACTLY MATCH the Swift class name.
+const NativeView: React.ComponentType<ExpoIVSRemoteStreamViewProps> =
   requireNativeViewManager('ExpoRealtimeIvsBroadcast_ExpoIVSRemoteStreamView');
 
-/**
- * A view that renders a remote participant's video stream from an IVS stage.
- */
-export function IVSRemoteStreamView(props: ExpoIVSRemoteStreamViewProps) {
-  return <NativeExpoIVSRemoteStreamView {...props} />;
-} 
-
+export function ExpoIVSRemoteStreamView(props: ExpoIVSRemoteStreamViewProps) {
+  console.log('[ExpoIVSRemoteStreamView] Rendering with props:', JSON.stringify(props));
+  return <NativeView {...props} />;
+}
