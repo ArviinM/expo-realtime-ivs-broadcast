@@ -34,8 +34,9 @@ public class ExpoRealtimeIvsBroadcastModule: Module, IVSStageManagerDelegate {
       self.ivsStageManager?.initializeStage(audioConfig: nil, videoConfig: nil)
     }
 
-    AsyncFunction("joinStage") { (token: String) in
-      self.ivsStageManager?.joinStage(token: token)
+    AsyncFunction("joinStage") { (token: String, options: [String: Any]?) in
+      let targetId = options?["targetParticipantId"] as? String
+      self.ivsStageManager?.joinStage(token: token, targetParticipantId: targetId)
     }
 
     AsyncFunction("leaveStage") { 
@@ -74,34 +75,24 @@ public class ExpoRealtimeIvsBroadcastModule: Module, IVSStageManagerDelegate {
         promise.resolve(permissions)
       }
     }
-
-    // Expose the custom view for camera preview
+    
     View(ExpoIVSStagePreviewView.self) {
-      // Props for the view will be defined in ExpoIVSStagePreviewView.swift
-      // Example: Prop("mirror") { (view: ExpoIVSStagePreviewView, mirror: Bool) in view.setMirror(mirror) }
       Prop("mirror") { (view: ExpoIVSStagePreviewView, mirror: Bool) in
+        print("DEBUG: Setting stage preview mirror to \(mirror)")
         view.mirror = mirror
       }
 
       Prop("scaleMode") { (view: ExpoIVSStagePreviewView, scaleMode: String) in // "fit" or "fill"
+        print("DEBUG: Setting stage preview scaleMode to \(scaleMode)")
         view.scaleMode = scaleMode
       }
     }
 
     // Expose the custom view for remote stream rendering
     View(ExpoIVSRemoteStreamView.self) {
-        Prop("participantId") { (view: ExpoIVSRemoteStreamView, participantId: String?) in
-            print("DEBUG: Setting remote stream participantId to \(String(describing: participantId))")
-            view.participantId = participantId
-        }
-        Prop("deviceUrn") { (view: ExpoIVSRemoteStreamView, deviceUrn: String?) in
-            print("DEBUG: Setting remote stream deviceUrn to \(String(describing: deviceUrn))")
-          view.deviceUrn = deviceUrn
-        }
-        Prop("scaleMode") { (view: ExpoIVSRemoteStreamView, scaleMode: String?) in
-            print("DEBUG: Setting remote stream scaleMode to \(String(describing: scaleMode))")
-            view.scaleMode = scaleMode ?? "fit"
-        }
+      Prop("scaleMode") { (view: ExpoIVSRemoteStreamView, scaleMode: String?) in
+          view.scaleMode = scaleMode ?? "fit"
+      }
     }
 
     // Cleanup when the module is destroyed
@@ -115,6 +106,18 @@ public class ExpoRealtimeIvsBroadcastModule: Module, IVSStageManagerDelegate {
   func stageManagerDidEmitEvent(eventName: String, body: [String : Any]?) {
     self.sendEvent(eventName, body ?? [:])
   }
+
+  private func find<T: UIView>(viewOfType: T.Type, in view: UIView) -> T? {
+    if let foundView = view as? T {
+        return foundView
+    }
+    for subview in view.subviews {
+        if let foundView = find(viewOfType: T.self, in: subview) {
+            return foundView
+        }
+    }
+    return nil
+}
 
   // TODO: Helper functions to parse config maps into IVS SDK specific configuration objects if needed.
   // func parseAudioConfig(_ map: [String: Any]?) -> IVSLocalStageStreamAudioConfiguration? { ... }

@@ -34,12 +34,13 @@ import {
   addOnCameraSwapErrorListener,
   CameraSwappedPayload,
   CameraSwapErrorPayload,
+  triggerRemoteStreamTest
 } from 'expo-realtime-ivs-broadcast';
 
 const { width } = Dimensions.get('window');
 
 export default function App() {
-  const [token, setToken] = useState<string>('eyJhbGciOiJLTVMiLCJ0eXAiOiJKV1QifQ.eyJleHAiOjE3NDk1NjQ1NTMsImlhdCI6MTc0OTUyMTM1MywianRpIjoieTBZUldYUjdoWjFtIiwicmVzb3VyY2UiOiJhcm46YXdzOml2czphcC1zb3V0aC0xOjQ4MDYwOTMzMTcwNjpzdGFnZS9OQkZKb0plQ2l0ZGkiLCJ0b3BpYyI6Ik5CRkpvSmVDaXRkaSIsImV2ZW50c191cmwiOiJ3c3M6Ly9nbG9iYWwuZXZlbnRzLmxpdmUtdmlkZW8ubmV0Iiwid2hpcF91cmwiOiJodHRwczovL2I0NTg2OTFkMjBjOS5nbG9iYWwtYm0ud2hpcC5saXZlLXZpZGVvLm5ldCIsImNhcGFiaWxpdGllcyI6eyJhbGxvd19wdWJsaXNoIjp0cnVlLCJhbGxvd19zdWJzY3JpYmUiOnRydWV9LCJ2ZXJzaW9uIjoiMC4wIn0.MGQCMEuxE6uf_MeSCNvBH312nJ7Daf046_j37sVFqUTJFyALoK9CuLMr84y4bHjl3V-QBwIwc5j__hvYD0QP1cEk2CZqFzpSPNVAnH4rPGZLa8hA0Xoep8hBKSkZm-mGDTALWhAv'); // Store your IVS Stage token here
+  const [token, setToken] = useState<string>('eyJhbGciOiJLTVMiLCJ0eXAiOiJKV1QifQ.eyJleHAiOjE3NDk2MDc4NjIsImlhdCI6MTc0OTU2NDY2MiwianRpIjoicHc3MEwxNEkzUTl1IiwicmVzb3VyY2UiOiJhcm46YXdzOml2czphcC1zb3V0aC0xOjQ4MDYwOTMzMTcwNjpzdGFnZS9OQkZKb0plQ2l0ZGkiLCJ0b3BpYyI6Ik5CRkpvSmVDaXRkaSIsImV2ZW50c191cmwiOiJ3c3M6Ly9nbG9iYWwuZXZlbnRzLmxpdmUtdmlkZW8ubmV0Iiwid2hpcF91cmwiOiJodHRwczovL2I0NTg2OTFkMjBjOS5nbG9iYWwtYm0ud2hpcC5saXZlLXZpZGVvLm5ldCIsImNhcGFiaWxpdGllcyI6eyJhbGxvd19zdWJzY3JpYmUiOnRydWV9LCJ2ZXJzaW9uIjoiMC4wIn0.MGQCMEQdKfgdl3BvDBneSdw8i9NV51LjyF1ps8Sa1e4JKKBj2qSXRMPcIDLRFvSjqfAoCwIwTf4v0ujjwojRKPQKpSvNPzSkhXWWQIZkMdN9gSQl-4y0a14vPDTVw2hIzE0RnWn7'); // Store your IVS Stage token here
   const [isPublished, setIsPublished] = useState<boolean>(false);
   const [isMuted, setIsMuted] = useState<boolean>(false);
   const [mirrorView, setMirrorView] = useState<boolean>(false);
@@ -53,6 +54,15 @@ export default function App() {
 
   // Use the new hook to get participant data
   const { participants } = useStageParticipants();
+
+  const handleTestRender = async () => {
+    try {
+      console.log('--- Triggering Force Render Test ---');
+      await triggerRemoteStreamTest();
+    } catch (e) {
+      console.error('Test render error:', e);
+    }
+  };
 
   useEffect(() => {
     // Log participant data whenever it changes, for debugging purposes.
@@ -214,39 +224,45 @@ export default function App() {
         </View>
 
         <View style={styles.group}>
+          <Text style={styles.groupHeader}>!! DEBUG !!</Text>
+          <Button title="Force Render Test" onPress={handleTestRender} color="red" />
+        </View>
+
+        <View style={styles.group}>
           <Text style={styles.groupHeader}>Remote Participants ({participants.length})</Text>
-          {participants.length === 0 ? (
-            <Text>No one else has joined the stage.</Text>
-          ) : (
             <ScrollView horizontal style={styles.remoteStreamsContainer}>
               {participants.map(p => {
-                // Find the video stream for the participant
-                const videoStream = p.streams.find(s => s.mediaType === 'video');
-                
-                // By changing the key when the video stream becomes available,
-                // we force React to create a new component instead of updating the old one.
-                // This is the definitive fix for the props-not-updating issue.
-                return (
-                  <View key={p.id + (videoStream?.deviceUrn ?? '')} style={styles.remoteStreamWrapper}>
-                    {videoStream ? (
-                      <ExpoIVSRemoteStreamView
-                        style={styles.remoteStream}
-                        participantId={p.id}
-                        deviceUrn={videoStream.deviceUrn}
-                        scaleMode="fill"
-                      />
-                    ) : (
-                      <View style={styles.remoteStreamPlaceholder}>
-                        <Text style={styles.remoteStreamText}>{(p.id || '...').substring(0, 8)}</Text>
-                        <Text style={styles.remoteStreamText}>(No Video)</Text>
-                      </View>
-                    )}
-                    <Text style={styles.remoteStreamLabel}>{(p.id || '...').substring(0, 8)}</Text>
+            // Find the video stream for the participant
+            const videoStream = p.streams.find(s => s.mediaType === 'video');
+            
+            // --- THE FINAL FIX IS HERE ---
+            // We create a unique key. When the participant has no video, the key is just their ID.
+            // As soon as `videoStream` becomes available, the key changes to "ID + URN".
+            // React sees this new key and unmounts the old placeholder, creating a
+            // brand new <ExpoIVSRemoteStreamView> with the correct props from the very start.
+            const key = p.id + (videoStream?.deviceUrn ?? '');
+
+            return (
+              <View key={key} style={styles.remoteStreamWrapper}>
+                {videoStream ? (
+                  <ExpoIVSRemoteStreamView
+                    style={styles.remoteStream}
+                    participantId={p.id}
+                    deviceUrn={videoStream.deviceUrn}
+                    scaleMode="fill"
+                  />
+                ) : (
+                  <View style={styles.remoteStreamPlaceholder}>
+                    <Text style={styles.remoteStreamText}>{(p.id || '...').substring(0, 8)}</Text>
+                    <Text style={styles.remoteStreamText}>(No Video)</Text>
                   </View>
-                );
-              })}
+                )}
+                <Text style={styles.remoteStreamLabel}>{(p.id || '...').substring(0, 8)}</Text>
+              </View>
+            );
+          })}
             </ScrollView>
-          )}
+
         </View>
 
         <View style={styles.group}>

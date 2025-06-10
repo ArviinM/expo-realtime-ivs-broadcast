@@ -6,7 +6,7 @@ import { LocalAudioConfig, LocalVideoConfig, PermissionStatusMap, ExpoRealtimeIv
 // for our event names and payloads, resolving the 'never' type error.
 export type ExpoRealtimeIvsBroadcastModuleType = {
   initialize(audioConfig?: LocalAudioConfig, videoConfig?: LocalVideoConfig): Promise<void>;
-  joinStage(token: string): Promise<void>;
+  joinStage(token: string, options?: { targetParticipantId?: string }): Promise<void>;
   leaveStage(): Promise<void>;
   setStreamsPublished(published: boolean): Promise<void>;
   swapCamera(): Promise<void>;
@@ -18,6 +18,7 @@ export type ExpoRealtimeIvsBroadcastModuleType = {
     listener: (event: Parameters<ExpoRealtimeIvsBroadcastModuleEvents[EventName]>[0]) => void
   ): EventSubscription;
   removeListeners(count: number): void;
+  triggerRemoteStreamTest(): Promise<void>;
 };
 
 const ExpoModule: ExpoRealtimeIvsBroadcastModuleType = requireNativeModule('ExpoRealtimeIvsBroadcast');

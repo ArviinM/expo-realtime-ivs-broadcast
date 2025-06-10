@@ -29,8 +29,8 @@ export async function initialize(audioConfig?: LocalAudioConfig, videoConfig?: L
   return await ExpoRealtimeIvsBroadcastModule.initialize(audioConfig, videoConfig);
 }
 
-export async function joinStage(token: string): Promise<void> {
-  return await ExpoRealtimeIvsBroadcastModule.joinStage(token);
+export async function joinStage(token: string, options?: { targetParticipantId?: string }): Promise<void> {
+  return await ExpoRealtimeIvsBroadcastModule.joinStage(token, options);
 }
 
 export async function leaveStage(): Promise<void> {
@@ -51,6 +51,10 @@ export async function setMicrophoneMuted(muted: boolean): Promise<void> {
 
 export async function requestPermissions(): Promise<PermissionStatusMap> {
   return await ExpoRealtimeIvsBroadcastModule.requestPermissions();
+}
+
+export async function triggerRemoteStreamTest(): Promise<void> {
+  return await ExpoRealtimeIvsBroadcastModule.triggerRemoteStreamTest();
 }
 
 // --- Event Emitter ---

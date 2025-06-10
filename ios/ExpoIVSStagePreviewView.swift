@@ -5,12 +5,13 @@ import UIKit
 class ExpoIVSStagePreviewView: ExpoView {
     private var ivsImagePreviewView: IVSImagePreviewView?
     private weak var stageManager: IVSStageManager? // Hold a weak reference
-    private var currentPreviewDeviceUrn: String? // Store URN of the device for current preview
+    private var currentPreviewDeviceUrn: String? 
 
     // Props from React Native
     var mirror: Bool = false {
         didSet {
             // This will apply mirroring if/when ivsImagePreviewView is available
+            print("DEBUG: mirroring" + String(describing: mirror))
             ivsImagePreviewView?.setMirrored(mirror)
         }
     }

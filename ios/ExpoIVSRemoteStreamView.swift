@@ -7,37 +7,25 @@ import UIKit
 class ExpoIVSRemoteStreamView: ExpoView {
     private var ivsImagePreviewView: IVSImagePreviewView?
     private weak var stageManager: IVSStageManager?
-    private var currentRenderedDeviceUrn: String?
+    
+    // This is the only state this view needs: what is it currently rendering?
+    private(set) var currentRenderedDeviceUrn: String?
 
-    // Props from React Native
-    var participantId: String? {
-        didSet {
-            if oldValue != participantId {
-                updateStream()
-            }
-        }
-    }
-
-    var deviceUrn: String? {
-        didSet {
-            if oldValue != deviceUrn {
-                updateStream()
-            }
-        }
-    }
-
+    // No more participantId or deviceUrn props!
     var scaleMode: String = "fit" {
-        didSet {
-            updateScaleMode()
-        }
+        didSet { updateScaleMode() }
     }
 
     // MARK: - Initializers
 
     required init(appContext: AppContext? = nil) {
         super.init(appContext: appContext)
-        // This is now the single point of entry for setup.
         resolveStageManager()
+    }
+
+    deinit {
+        // When the view is destroyed, unregister from the manager.
+        stageManager?.unregisterRemoteView(self)
     }
 
     override init(frame: CGRect) {
@@ -53,69 +41,45 @@ class ExpoIVSRemoteStreamView: ExpoView {
     // MARK: - Setup and Rendering
 
     private func resolveStageManager() {
-        // This function now acts as the main setup method.
+        // guard let module = appContext?.legacyModule(implementing: ExpoRealtimeIvsBroadcastModule.self) else { return }
         guard let moduleRegistry = appContext?.moduleRegistry else {
-            print("ExpoIVSRemoteStreamView: Could not find moduleRegistry in app context.")
+            print("ExpoRealtimeIvsBroadcastModule: Could not find moduleRegistry in app context.")
             return
         }
+
         guard let untypedModule = moduleRegistry.get(moduleWithName: "ExpoRealtimeIvsBroadcast"),
               let module = untypedModule as? ExpoRealtimeIvsBroadcastModule else {
-            print("ExpoIVSRemoteStreamView: Could not find or cast ExpoRealtimeIvsBroadcastModule.")
+            print("ExpoIVSStagePreviewView: Could not find or cast ExpoRealtimeIvsBroadcastModule from module registry using get(moduleWithName:).")
             return
         }
-        self.stageManager = module.ivsStageManager
 
-        // --- THE FIX ---
-        // Immediately try to render with the current props as soon as the view is created.
-        // This mirrors the behavior of the working ExpoIVSStagePreviewView.
-        updateStream()
+        self.stageManager = module.ivsStageManager
+        self.stageManager?.registerRemoteView(self)
     }
 
-    public func updateStream() {
-        // Put the logs at the top so we ALWAYS see them when the function is called.
+    public func renderStream(participantId: String, deviceUrn: String) {
+        guard let manager = self.stageManager else { return }
+        if deviceUrn == self.currentRenderedDeviceUrn { return }
+
         print("--------------------------------------------------")
-        print("✅ [REMOTE VIEW] updateStream called.")
-        print("✅ [REMOTE VIEW] Current participantId: \(self.participantId ?? "nil")")
-        print("✅ [REMOTE VIEW] Current deviceUrn: \(self.deviceUrn ?? "nil")")
-
-        // Ensure we have the necessary identifiers and the manager
-        guard let pId = self.participantId, !pId.isEmpty,
-              let urn = self.deviceUrn, !urn.isEmpty,
-              let manager = self.stageManager else {
-            print("❌ [REMOTE VIEW] Missing props or manager. Cleaning up.")
-            cleanupStreamView()
-            print("--------------------------------------------------")
-            return
-        }
-
-        // Check for Redundancy
-        if urn == self.currentRenderedDeviceUrn {
-            print("🟡 [REMOTE VIEW] Already rendering this URN. No change needed.")
-            print("--------------------------------------------------")
-            return
-        }
+        print("✅ [REMOTE VIEW] renderStream called.")
+        print("✅ [REMOTE VIEW] Current participantId: \(participantId)")
+        print("✅ [REMOTE VIEW] Current deviceUrn: \(deviceUrn)")
         
         cleanupStreamView()
 
-        // Find the stream
-        guard let stream = manager.findStream(forParticipantId: pId, deviceUrn: urn) else {
-            print("❌ [REMOTE VIEW] Could not find stream in manager.")
-            print("--------------------------------------------------")
-            return
-        }
-
-        // Get the device and cast it
-        guard let imageDevice = stream.device as? IVSImageDevice else {
-            print("❌ [REMOTE VIEW] Stream's device is not an IVSImageDevice.")
-            print("--------------------------------------------------")
+        guard let stream = manager.findStream(forParticipantId: participantId, deviceUrn: deviceUrn),
+              let imageDevice = stream.device as? IVSImageDevice else {
             return
         }
 
         do {
-            // Create the preview from the device
             let newPreview = try imageDevice.previewView()
             
+            self.ivsImagePreviewView = newPreview
+            self.currentRenderedDeviceUrn = deviceUrn
             addSubview(newPreview)
+
             newPreview.translatesAutoresizingMaskIntoConstraints = false
             NSLayoutConstraint.activate([
                 newPreview.topAnchor.constraint(equalTo: topAnchor),
@@ -123,17 +87,16 @@ class ExpoIVSRemoteStreamView: ExpoView {
                 newPreview.leadingAnchor.constraint(equalTo: leadingAnchor),
                 newPreview.trailingAnchor.constraint(equalTo: trailingAnchor)
             ])
-            
-            self.ivsImagePreviewView = newPreview
-            self.currentRenderedDeviceUrn = urn
-            updateScaleMode()
 
-            print("✅ [REMOTE VIEW] Successfully created and configured preview for URN \(urn).")
+            updateScaleMode()
+            print("✅ [REMOTE VIEW] Manager commanded me to render URN: \(deviceUrn)")
         } catch {
-            print("❌ [REMOTE VIEW] Failed to create previewView from device: \(error)")
-            cleanupStreamView()
+            print("❌ [REMOTE VIEW] Failed to create preview for URN \(deviceUrn): \(error)")
         }
-        print("--------------------------------------------------")
+    }
+
+    public func clearStream() {
+        cleanupStreamView()
     }
 
     private func cleanupStreamView() {
