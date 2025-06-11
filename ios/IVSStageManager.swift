@@ -552,6 +552,16 @@ extension IVSStageManager {
         print("IVSStageManager Renderer: Participant left: \(participant.participantId ?? "N/A")")
         if participant.isLocal { return }
 
+        if let leavingParticipant = self.participants.first(where: { $0.info.participantId == participant.participantId }) {
+            let removedUrns = leavingParticipant.streams.map { $0.device.descriptor().urn }
+            for viewWrapper in self.remoteViews {
+                if let view = viewWrapper.value, let renderedUrn = view.currentRenderedDeviceUrn, removedUrns.contains(renderedUrn) {
+                    print("🧠 [MANAGER] A participant left. Commanding their view to clear.")
+                    view.clearStream()
+                }
+            }
+        }
+
         // Remove the participant from our state.
         self.participants.removeAll { $0.info.participantId == participant.participantId }
 
@@ -611,6 +621,16 @@ extension IVSStageManager {
         print("IVSStageManager Renderer: Participant \(participant.participantId ?? "N/A") removed \(streams.count) streams.")
 
         if participant.isLocal { return }
+        
+        let removedUrns = streams.map { $0.device.descriptor().urn }
+
+        for viewWrapper in self.remoteViews {
+            if let view = viewWrapper.value, let renderedUrn = view.currentRenderedDeviceUrn, removedUrns.contains(renderedUrn) {
+                print("🧠 [MANAGER] A stream being rendered was removed. Commanding view to clear.")
+                // Tell the view to clear itself.
+                view.clearStream()
+            }
+        }
 
         // Find the participant and remove the streams from their list
         if let existingParticipant = self.participants.first(where: { $0.info.participantId == participant.participantId }) {
@@ -628,8 +648,9 @@ extension IVSStageManager {
             "participantId": participant.participantId ?? "",
             "streams": streamDicts
         ]
+
         
-        print("✅ [DEBUG] Body: \(body)")
+
         delegate?.stageManagerDidEmitEvent(eventName: "onParticipantStreamsRemoved", body: body)
     }
     
