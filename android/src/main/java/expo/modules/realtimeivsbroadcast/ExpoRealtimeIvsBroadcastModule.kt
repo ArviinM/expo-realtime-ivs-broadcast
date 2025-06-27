@@ -1,50 +1,103 @@
 package expo.modules.realtimeivsbroadcast
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.annotation.RequiresApi
+import androidx.core.content.ContextCompat
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
-import java.net.URL
+import expo.modules.kotlin.exception.Exceptions
 
-class ExpoRealtimeIvsBroadcastModule : Module() {
-  // Each module class must implement the definition function. The definition consists of components
-  // that describes the module's functionality and behavior.
-  // See https://docs.expo.dev/modules/module-api for more details about available components.
-  override fun definition() = ModuleDefinition {
-    // Sets the name of the module that JavaScript code will use to refer to the module. Takes a string as an argument.
-    // Can be inferred from module's class name, but it's recommended to set it explicitly for clarity.
-    // The module will be accessible from `requireNativeModule('ExpoRealtimeIvsBroadcast')` in JavaScript.
-    Name("ExpoRealtimeIvsBroadcast")
+class ExpoRealtimeIvsBroadcastModule : Module(), IVSStageManagerDelegate {
+    var ivsStageManager: IVSStageManager? = null
 
-    // Sets constant properties on the module. Can take a dictionary or a closure that returns a dictionary.
-    Constants(
-      "PI" to Math.PI
-    )
+    @RequiresApi(Build.VERSION_CODES.P)
+    override fun definition() = ModuleDefinition {
+        Name("ExpoRealtimeIvsBroadcast")
 
-    // Defines event names that the module can send to JavaScript.
-    Events("onChange")
+        Events(
+            "onStageConnectionStateChanged",
+            "onParticipantJoined",
+            "onParticipantLeft",
+            "onParticipantStreamsAdded",
+            "onParticipantStreamsRemoved",
+            "onPublishStateChanged",
+            "onStageError"
+        )
 
-    // Defines a JavaScript synchronous function that runs the native code on the JavaScript thread.
-    Function("hello") {
-      "Hello world! 👋"
+        OnCreate {
+            val reactContext = appContext.reactContext ?: throw Exceptions.ReactContextLost()
+            ivsStageManager = IVSStageManager(reactContext)
+            ivsStageManager?.delegate = this@ExpoRealtimeIvsBroadcastModule
+        }
+
+        // --- Module Functions ---
+
+        AsyncFunction("requestPermissions") {
+            val reactContext = appContext.reactContext ?: throw Exceptions.ReactContextLost()
+            
+            val cameraStatus = ContextCompat.checkSelfPermission(reactContext, Manifest.permission.CAMERA)
+            val microphoneStatus = ContextCompat.checkSelfPermission(reactContext, Manifest.permission.RECORD_AUDIO)
+
+            return@AsyncFunction mapOf(
+                "camera" to if (cameraStatus == PackageManager.PERMISSION_GRANTED) "granted" else "denied",
+                "microphone" to if (microphoneStatus == PackageManager.PERMISSION_GRANTED) "granted" else "denied"
+            )
+        }
+
+        AsyncFunction("initialize") { audioConfig: Map<String, Any>?, videoConfig: Map<String, Any>? ->
+            // In the current Android SDK, audio and video configurations are not passed during
+            // the initial setup in the same way. They are configured on the LocalStageStream.
+            // This function will primarily just call initializeStage on the manager.
+            // We can extend this later to parse the config maps if needed.
+            ivsStageManager?.initializeStage(audioConfig = null, videoConfig = null)
+        }
+
+        AsyncFunction("joinStage") { token: String, options: Map<String, Any>? ->
+            val targetId = options?.get("targetParticipantId") as? String
+            ivsStageManager?.joinStage(token, targetId)
+        }
+
+        AsyncFunction("leaveStage") {
+            ivsStageManager?.leaveStage()
+        }
+
+        AsyncFunction("setStreamsPublished") { published: Boolean ->
+            ivsStageManager?.setStreamsPublished(published)
+        }
+
+        AsyncFunction("swapCamera") {
+            ivsStageManager?.swapCamera()
+        }
+
+        AsyncFunction("setMicrophoneMuted") { muted: Boolean ->
+            ivsStageManager?.setMicrophoneMuted(muted)
+        }
+
+        // --- View Definitions ---
+        
+        View(ExpoIVSStagePreviewView::class) {
+            Prop("mirror") { view: ExpoIVSStagePreviewView, mirror: Boolean ->
+                view.setMirror(mirror)
+            }
+            Prop("scaleMode") { view: ExpoIVSStagePreviewView, scaleMode: String ->
+                view.setScaleMode(scaleMode)
+            }
+        }
+
+        View(ExpoIVSRemoteStreamView::class) {
+            // This view is "dumb" and managed by the IVSStageManager.
+            // It only needs a scaleMode prop for visual configuration.
+            Prop("scaleMode") { view: ExpoIVSRemoteStreamView, scaleMode: String ->
+                view.setScaleMode(scaleMode)
+            }
+        }
     }
 
-    // Defines a JavaScript function that always returns a Promise and whose native code
-    // is by default dispatched on the different thread than the JavaScript runtime runs on.
-    AsyncFunction("setValueAsync") { value: String ->
-      // Send an event to JavaScript.
-      sendEvent("onChange", mapOf(
-        "value" to value
-      ))
-    }
+    // --- IVSStageManagerDelegate Implementation ---
 
-    // Enables the module to be used as a native view. Definition components that are accepted as part of
-    // the view definition: Prop, Events.
-    View(ExpoRealtimeIvsBroadcastView::class) {
-      // Defines a setter for the `url` prop.
-      Prop("url") { view: ExpoRealtimeIvsBroadcastView, url: URL ->
-        view.webView.loadUrl(url.toString())
-      }
-      // Defines an event that the view can send to JavaScript.
-      Events("onLoad")
+    override fun stageManagerDidEmitEvent(eventName: String, body: Map<String, Any?>) {
+        sendEvent(eventName, body)
     }
-  }
 }

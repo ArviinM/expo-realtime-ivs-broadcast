@@ -39,7 +39,7 @@ import {
 const { width } = Dimensions.get('window');
 
 export default function App() {
-  const [token, setToken] = useState<string>(''); // Store your IVS Stage token here
+  const [token, setToken] = useState<string>('eyJhbGciOiJLTVMiLCJ0eXAiOiJKV1QifQ.eyJleHAiOjE3NTEwOTQ0NDUsImlhdCI6MTc1MTA1MTI0NSwianRpIjoiMURxRmROcmJTanlTIiwicmVzb3VyY2UiOiJhcm46YXdzOml2czphcC1zb3V0aC0xOjQ4MDYwOTMzMTcwNjpzdGFnZS9OQkZKb0plQ2l0ZGkiLCJ0b3BpYyI6Ik5CRkpvSmVDaXRkaSIsImV2ZW50c191cmwiOiJ3c3M6Ly9nbG9iYWwuZXZlbnRzLmxpdmUtdmlkZW8ubmV0Iiwid2hpcF91cmwiOiJodHRwczovL2I0NTg2OTFkMjBjOS5nbG9iYWwtYm0ud2hpcC5saXZlLXZpZGVvLm5ldCIsImNhcGFiaWxpdGllcyI6eyJhbGxvd19wdWJsaXNoIjp0cnVlLCJhbGxvd19zdWJzY3JpYmUiOnRydWV9LCJ2ZXJzaW9uIjoiMC4wIn0.MGYCMQCJWw4sglfjQqLyXNF3kIvRcLDyErhoEB-jmiRIwZ8ykltYp6mXf70GvD7eUVNLIlsCMQDGN_8TEBLrnyjbSeJGK3zsB5XoFbfObSeG39ytByibITv4t7A472Lsjtj0wYqca60'); // Store your IVS Stage token here
   const [isPublished, setIsPublished] = useState<boolean>(false);
   const [isMuted, setIsMuted] = useState<boolean>(false);
   const [mirrorView, setMirrorView] = useState<boolean>(false);
@@ -124,17 +124,34 @@ export default function App() {
   };
 
   const handleRequestPermissions = async () => {
+    if (Platform.OS === 'android') {
+      try {
+        const granted = await PermissionsAndroid.requestMultiple([
+          PermissionsAndroid.PERMISSIONS.CAMERA,
+          PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
+        ]);
+        const cameraStatus = granted[PermissionsAndroid.PERMISSIONS.CAMERA] === 'granted' ? 'granted' : 'denied';
+        const microphoneStatus = granted[PermissionsAndroid.PERMISSIONS.RECORD_AUDIO] === 'granted' ? 'granted' : 'denied';
+        
+        const newStatus: PermissionStatusMap = { camera: cameraStatus, microphone: microphoneStatus };
+        setPermissionStatus(newStatus);
+        console.log('Android Permissions:', newStatus);
+
+        if (cameraStatus !== 'granted' || microphoneStatus !== 'granted') {
+          console.warn("Warning: Not all permissions were granted. The stream may not work as expected.");
+        }
+      } catch (err) {
+        console.warn(err);
+      }
+      return;
+    }
+
+    // For iOS, our module's requestPermissions will check the status.
+    // The system dialog will appear automatically on first use of the camera/mic by the SDK.
     try {
       const status = await requestPermissions();
       setPermissionStatus(status);
-      console.log('Permissions:', status);
-      if (Platform.OS === 'android') {
-        if (status.camera !== 'granted' || status.microphone !== 'granted') {
-            // On Android, native requestPermissions will pop system dialogs
-            // For more complex scenarios, one might use PermissionsAndroid.requestMultiple
-            console.warn("Android permissions not fully granted via native module call, system dialogs should have appeared.");
-        }
-      }
+      console.log('iOS Permissions:', status);
     } catch (e) {
       console.error('Request permissions error:', e);
     }
