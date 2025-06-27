@@ -2,6 +2,7 @@ package expo.modules.realtimeivsbroadcast
 
 import android.content.Context
 import android.os.Build
+import android.util.Log
 import android.view.View
 import android.widget.FrameLayout
 import androidx.annotation.RequiresApi
@@ -23,12 +24,19 @@ class ExpoIVSStagePreviewView(context: Context, appContext: AppContext) : ExpoVi
     private var scaleMode: String = "fit"
 
     init {
+        Log.i("ExpoIVSStagePreviewView", "Initializing Stage Preview View...")
         resolveStageManagerAndStream()
     }
 
     private fun resolveStageManagerAndStream() {
-        val module = appContext?.legacyModule<ExpoRealtimeIvsBroadcastModule>() ?: return
-        this.stageManager = module.ivsStageManager
+        Log.d("ExpoIVSStagePreviewView", "Attempting to resolve StageManager singleton...")
+        this.stageManager = IVSStageManager.instance
+        
+        if (this.stageManager == null) {
+            Log.e("ExpoIVSStagePreviewView", "IVSStageManager singleton instance is null.")
+            return
+        }
+        Log.d("ExpoIVSStagePreviewView", "StageManager instance assigned. Attaching stream...")
         attachStream()
     }
 

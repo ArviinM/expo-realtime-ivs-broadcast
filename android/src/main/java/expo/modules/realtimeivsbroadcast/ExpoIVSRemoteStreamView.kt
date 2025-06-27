@@ -2,6 +2,7 @@ package expo.modules.realtimeivsbroadcast
 
 import android.content.Context
 import android.os.Build
+import android.util.Log
 import android.view.View
 import android.widget.FrameLayout
 import androidx.annotation.RequiresApi
@@ -25,15 +26,22 @@ class ExpoIVSRemoteStreamView(context: Context, appContext: AppContext) : ExpoVi
     private var scaleMode: String = "fit"
 
     init {
+        Log.i("ExpoIVSRemoteStreamView", "Initializing Remote Stream View...")
         resolveStageManager()
     }
     
     private fun resolveStageManager() {
-        appContext.legacyModule<ExpoRealtimeIvsBroadcastModule>()?.let {
-            this.stageManager = it.ivsStageManager
-            // Announce its existence to the manager so it can be used as a canvas
-            it.ivsStageManager?.registerRemoteView(this)
+        Log.d("ExpoIVSRemoteStreamView", "Attempting to resolve StageManager singleton...")
+        this.stageManager = IVSStageManager.instance
+
+        if (this.stageManager == null) {
+            Log.e("ExpoIVSRemoteStreamView", "IVSStageManager singleton instance is null.")
+            return
         }
+        Log.d("ExpoIVSRemoteStreamView", "StageManager instance assigned. Registering view...")
+
+        // Announce its existence to the manager so it can be used as a canvas
+        this.stageManager?.registerRemoteView(this)
     }
 
     // This is the command the manager will issue to this view

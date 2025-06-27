@@ -39,7 +39,14 @@ class IVSStageManager(private val context: Context) : Stage.Strategy, StageRende
     private val remoteViews = mutableListOf<WeakReference<ExpoIVSRemoteStreamView>>()
     private var targetParticipantId: String? = null
 
+    companion object {
+        @JvmStatic
+        var instance: IVSStageManager? = null
+            private set
+    }
+
     init {
+        instance = this
         discoverDevices()
     }
 

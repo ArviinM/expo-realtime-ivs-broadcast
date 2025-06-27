@@ -10,8 +10,6 @@ import expo.modules.kotlin.modules.ModuleDefinition
 import expo.modules.kotlin.exception.Exceptions
 
 class ExpoRealtimeIvsBroadcastModule : Module(), IVSStageManagerDelegate {
-    var ivsStageManager: IVSStageManager? = null
-
     @RequiresApi(Build.VERSION_CODES.P)
     override fun definition() = ModuleDefinition {
         Name("ExpoRealtimeIvsBroadcast")
@@ -27,9 +25,11 @@ class ExpoRealtimeIvsBroadcastModule : Module(), IVSStageManagerDelegate {
         )
 
         OnCreate {
-            val reactContext = appContext.reactContext ?: throw Exceptions.ReactContextLost()
-            ivsStageManager = IVSStageManager(reactContext)
-            ivsStageManager?.delegate = this@ExpoRealtimeIvsBroadcastModule
+            if (IVSStageManager.instance == null) {
+                val reactContext = appContext.reactContext ?: throw Exceptions.ReactContextLost()
+                IVSStageManager(reactContext)
+            }
+            IVSStageManager.instance?.delegate = this@ExpoRealtimeIvsBroadcastModule
         }
 
         // --- Module Functions ---
@@ -47,32 +47,28 @@ class ExpoRealtimeIvsBroadcastModule : Module(), IVSStageManagerDelegate {
         }
 
         AsyncFunction("initialize") { audioConfig: Map<String, Any>?, videoConfig: Map<String, Any>? ->
-            // In the current Android SDK, audio and video configurations are not passed during
-            // the initial setup in the same way. They are configured on the LocalStageStream.
-            // This function will primarily just call initializeStage on the manager.
-            // We can extend this later to parse the config maps if needed.
-            ivsStageManager?.initializeStage(audioConfig = null, videoConfig = null)
+            IVSStageManager.instance?.initializeStage(audioConfig = null, videoConfig = null)
         }
 
         AsyncFunction("joinStage") { token: String, options: Map<String, Any>? ->
             val targetId = options?.get("targetParticipantId") as? String
-            ivsStageManager?.joinStage(token, targetId)
+            IVSStageManager.instance?.joinStage(token, targetId)
         }
 
         AsyncFunction("leaveStage") {
-            ivsStageManager?.leaveStage()
+            IVSStageManager.instance?.leaveStage()
         }
 
         AsyncFunction("setStreamsPublished") { published: Boolean ->
-            ivsStageManager?.setStreamsPublished(published)
+            IVSStageManager.instance?.setStreamsPublished(published)
         }
 
         AsyncFunction("swapCamera") {
-            ivsStageManager?.swapCamera()
+            IVSStageManager.instance?.swapCamera()
         }
 
         AsyncFunction("setMicrophoneMuted") { muted: Boolean ->
-            ivsStageManager?.setMicrophoneMuted(muted)
+            IVSStageManager.instance?.setMicrophoneMuted(muted)
         }
 
         // --- View Definitions ---
