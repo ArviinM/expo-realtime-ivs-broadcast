@@ -1,9 +1,6 @@
 # Expo Real-time IVS Broadcast
 
-This module provides React Native components and a comprehensive API to integrate [Amazon IVS Real-Time Streaming](https://docs.aws.amazon.com/ivs/latest/RealTimeUserGuide/what-is.html) into your Expo application. It acts as a wrapper around the native Amazon IVS Broadcast SDK, allowing you to both publish your own camera/microphone and subscribe to remote participants' streams.
-
-> [!IMPORTANT]  
-> This module currently supports **iOS only**. Android support is not yet implemented.
+This module provides React Native components and a comprehensive API to integrate [Amazon IVS Real-Time Streaming](https://docs.aws.amazon.com/ivs/latest/RealTimeUserGuide/what-is.html) into your Expo application. It acts as a wrapper around the native Amazon IVS Broadcast SDK for both iOS and Android, allowing you to both publish your own camera/microphone and subscribe to remote participants' streams.
 
 ## Installation
 
@@ -14,6 +11,8 @@ npx expo install github:ArviinM/expo-realtime-ivs-broadcast
 ```
 
 ## Configuration
+
+### iOS
 
 You must add the required camera and microphone usage descriptions to your `Info.plist` file. If you don't, your app will crash when requesting permissions.
 
@@ -27,6 +26,12 @@ Open your `ios/<Your-Project-Name>/Info.plist` and add the following keys:
 ```
 
 After adding the permissions, you may need to prebuild your project: `npx expo prebuild --platform ios`.
+
+### Android
+
+The necessary permissions (`CAMERA`, `RECORD_AUDIO`, `INTERNET`) are already included in the library's `AndroidManifest.xml` and will be merged into your app's manifest automatically during the build process.
+
+However, you are still responsible for requesting these permissions from the user at runtime. This is standard Android behavior. You can use React Native's built-in `PermissionsAndroid` module to handle this, as shown in the example app.
 
 ## Core Concepts
 
@@ -101,7 +106,7 @@ All methods are asynchronous and return a `Promise`.
 -   `setStreamsPublished(published)`: Toggles the publishing of local video and audio streams.
 -   `swapCamera()`: Switches between the front and back cameras.
 -   `setMicrophoneMuted(muted)`: Mutes or unmutes the local microphone.
--   `requestPermissions()`: Requests camera and microphone permissions from the user. Returns a `PermissionStatusMap`.
+-   `requestPermissions()`: Checks the current status of camera and microphone permissions. On Android, this does **not** trigger the system permission dialog. Returns a `PermissionStatusMap`.
 
 ### Event Listeners
 
