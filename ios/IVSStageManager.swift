@@ -53,7 +53,6 @@ class IVSStageManager: NSObject, IVSStageStreamDelegate, IVSStageStrategy, IVSSt
     override init() {
         super.init()
         // Discover devices early if needed, or on demand
-        discoverDevices()
         setupAudioSession()
     }
 
@@ -91,15 +90,10 @@ class IVSStageManager: NSObject, IVSStageStreamDelegate, IVSStageStrategy, IVSSt
 
     // MARK: - Public API (to be called from ExpoRealtimeIvsBroadcastModule)
 
-    func initializeStage(audioConfig: IVSLocalStageStreamAudioConfiguration? = nil, videoConfig: IVSLocalStageStreamVideoConfiguration? = nil) {
-        // This method can be used to pre-configure stream settings if desired.
-        // Create local streams here if not already created, or update their configurations.
-        print("IVSStageManager: Initializing stage (pre-configuring streams).")
+    func initializeLocalStreams(audioConfig: IVSLocalStageStreamAudioConfiguration? = nil, videoConfig: IVSLocalStageStreamVideoConfiguration? = nil) {
+        print("IVSStageManager: Initializing local streams.")
 
-        // Ensure devices are discovered (or re-discovered if necessary)
-        if availableCameras.isEmpty { // Or some other condition to re-discover
-            discoverDevices()
-        }
+        discoverDevices()
 
         // Create camera stream
         if let camera = currentCameraDevice as? IVSCamera {
@@ -115,7 +109,7 @@ class IVSStageManager: NSObject, IVSStageStreamDelegate, IVSStageStrategy, IVSSt
 
             let streamConfig = IVSLocalStageStreamConfiguration()
             streamConfig.video = finalVideoConfig
-            
+
             self.cameraStream = IVSLocalStageStream(device: camera, config: streamConfig)
             self.cameraStream?.delegate = self
             print("Camera stream created.")
@@ -130,10 +124,10 @@ class IVSStageManager: NSObject, IVSStageStreamDelegate, IVSStageStrategy, IVSSt
 
         if let microphoneDevice = micDevice as? IVSMicrophone {
             let finalAudioConfig: IVSLocalStageStreamAudioConfiguration = audioConfig ?? IVSLocalStageStreamAudioConfiguration()
-            
+
             let streamConfig = IVSLocalStageStreamConfiguration()
             streamConfig.audio = finalAudioConfig
-            
+
             self.microphoneStream = IVSLocalStageStream(device: microphoneDevice, config: streamConfig)
             self.microphoneStream?.delegate = self
             print("Microphone stream created using discovered device.")
@@ -142,13 +136,14 @@ class IVSStageManager: NSObject, IVSStageStreamDelegate, IVSStageStrategy, IVSSt
         }
     }
 
+    func initializeStage(audioConfig: IVSLocalStageStreamAudioConfiguration? = nil, videoConfig: IVSLocalStageStreamVideoConfiguration? = nil) {
+        // This method is now primarily for setting up non-device-related configurations if any were to be added.
+        // For now, it's a placeholder to maintain API consistency.
+        print("IVSStageManager: Stage initialized (configuration settings).")
+    }
+
     func joinStage(token: String, targetParticipantId: String? = nil) {
         self.targetParticipantId = targetParticipantId
-        guard cameraStream != nil, microphoneStream != nil else {
-            print("Error: Streams not initialized. Call initializeStage first.")
-            delegate?.stageManagerDidEmitEvent(eventName: "onStageError", body: ["code": -1, "description": "Streams not initialized. Call initializeStage first.", "source": "IVSStageManager.joinStage.guard", "isFatal": true])
-            return
-        }
 
         // The IVSStageManager itself will now be the strategy.
         do {

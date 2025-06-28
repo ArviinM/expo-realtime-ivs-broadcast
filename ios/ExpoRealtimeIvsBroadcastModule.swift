@@ -26,12 +26,14 @@ public class ExpoRealtimeIvsBroadcastModule: Module, IVSStageManagerDelegate {
 
     // --- Methods Exposed to JS ---
 
-    AsyncFunction("initialize") { (audioConfigMap: [String: Any]?, videoConfigMap: [String: Any]?) -> Void in
-      // TODO: Parse audioConfigMap and videoConfigMap into IVSLocalStageStreamAudioConfiguration and IVSLocalStageStreamVideoConfiguration
+    AsyncFunction("initializeStage") { (audioConfigMap: [String: Any]?, videoConfigMap: [String: Any]?) -> Void in
       // For now, using nil, which will use default configurations in IVSStageManager
-      // Example: let audioConfig = parseAudioConfig(audioConfigMap)
-      //          let videoConfig = parseVideoConfig(videoConfigMap)
       self.ivsStageManager?.initializeStage(audioConfig: nil, videoConfig: nil)
+    }
+
+    AsyncFunction("initializeLocalStreams") { (audioConfigMap: [String: Any]?, videoConfigMap: [String: Any]?) -> Void in
+        // For now, using nil, which will use default configurations in IVSStageManager
+        self.ivsStageManager?.initializeLocalStreams(audioConfig: nil, videoConfig: nil)
     }
 
     AsyncFunction("joinStage") { (token: String, options: [String: Any]?) in

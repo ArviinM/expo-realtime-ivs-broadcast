@@ -46,8 +46,14 @@ class ExpoRealtimeIvsBroadcastModule : Module(), IVSStageManagerDelegate {
             )
         }
 
-        AsyncFunction("initialize") { audioConfig: Map<String, Any>?, videoConfig: Map<String, Any>? ->
+        AsyncFunction("initializeStage") { audioConfig: Map<String, Any>?, videoConfig: Map<String, Any>? ->
+            // TODO: Add audioConfig and videoConfig
             IVSStageManager.instance?.initializeStage(audioConfig = null, videoConfig = null)
+        }
+
+        AsyncFunction("initializeLocalStreams") { audioConfig: Map<String, Any>?, videoConfig: Map<String, Any>? ->
+            // TODO: Add audioConfig and videoConfig
+            IVSStageManager.instance?.initializeLocalStreams()
         }
 
         AsyncFunction("joinStage") { token: String, options: Map<String, Any>? ->

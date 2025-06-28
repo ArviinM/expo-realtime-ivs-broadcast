@@ -25,8 +25,12 @@ export { ExpoIVSRemoteStreamView } from './ExpoIVSRemoteStreamView';
 export { useStageParticipants } from './useStageParticipants';
 
 // --- Native Module Methods ---
-export async function initialize(audioConfig?: LocalAudioConfig, videoConfig?: LocalVideoConfig): Promise<void> {
-  return await ExpoRealtimeIvsBroadcastModule.initialize(audioConfig, videoConfig);
+export async function initializeStage(audioConfig?: LocalAudioConfig, videoConfig?: LocalVideoConfig): Promise<void> {
+  return await ExpoRealtimeIvsBroadcastModule.initializeStage(audioConfig, videoConfig);
+}
+
+export async function initializeLocalStreams(audioConfig?: LocalAudioConfig, videoConfig?: LocalVideoConfig): Promise<void> {
+  return await ExpoRealtimeIvsBroadcastModule.initializeLocalStreams(audioConfig, videoConfig);
 }
 
 export async function joinStage(token: string, options?: { targetParticipantId?: string }): Promise<void> {

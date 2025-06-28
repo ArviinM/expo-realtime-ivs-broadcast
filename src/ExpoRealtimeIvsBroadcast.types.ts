@@ -93,7 +93,7 @@ export type ExpoIVSStagePreviewViewProps = {
 // Props for the new remote stream view
 export type ExpoIVSRemoteStreamViewProps = {
   style?: StyleProp<ViewStyle>;
-  participantId: string;
-  deviceUrn: string;
+  participantId?: string;
+  deviceUrn?: string;
   scaleMode?: 'fit' | 'fill';
 };
