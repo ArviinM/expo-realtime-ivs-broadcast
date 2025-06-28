@@ -31,22 +31,31 @@ After adding the permissions, you may need to prebuild your project: `npx expo p
 
 The necessary permissions (`CAMERA`, `RECORD_AUDIO`, `INTERNET`) are already included in the library's `AndroidManifest.xml` and will be merged into your app's manifest automatically during the build process.
 
-However, you are still responsible for requesting these permissions from the user at runtime. This is standard Android behavior. You can use React Native's built-in `PermissionsAndroid` module to handle this, as shown in the example app.
+However, you are still responsible for requesting these permissions from the user at runtime before attempting to initialize local devices. This is standard Android behavior.
 
 ## Core Concepts
 
-This library supports two primary roles within an IVS Stage: the **Publisher** and the **Viewer**.
+This library is designed for two primary use cases: joining a stage as a **Viewer** or as a **Publisher**. The key difference is that viewers can join and watch streams without granting camera or microphone permissions, providing a less intrusive user experience.
 
-### Publisher (Broadcasting)
+### Viewer Workflow
+
+A viewer is a user who is only watching and listening to other participants. They are not prompted for any device permissions.
+
+1.  `initializeStage()`: Prepares the SDK with base configurations.
+2.  `joinStage(token)`: Joins the stage to begin receiving remote participant data.
+3.  `useStageParticipants()`: A hook that provides a list of remote participants.
+4.  `ExpoIVSRemoteStreamView`: A component to render a remote participant's video stream.
+
+### Publisher Workflow
 
 A publisher is a user who is actively sending their camera and microphone feed to the stage.
--   **Key Component:** `ExpoIVSStagePreviewView` is used to render the publisher's own local camera feed so they can see themselves.
 
-### Viewer (Subscribing)
+1.  `initializeStage()`: Prepares the SDK with base configurations.
+2.  `initializeLocalStreams()`: **This is the key step.** This method prepares the user's camera and microphone for publishing. This is the method that will trigger system permission prompts. It must be called before using `ExpoIVSStagePreviewView` or publishing streams.
+3.  `ExpoIVSStagePreviewView`: A component to render the publisher's own camera feed (optional, but recommended).
+4.  `joinStage(token)`: Joins the stage.
+5.  `setStreamsPublished(true)`: Starts sending the local streams to the other participants.
 
-A viewer is a user who is watching and listening to other participants on the stage.
--   **Key Hook:** `useStageParticipants` is the primary hook to get a live-updated list of all remote participants and their active streams.
--   **Key Component:** `ExpoIVSRemoteStreamView` is used to render the video stream of a single remote participant.
 
 ## API Reference
 
@@ -54,7 +63,7 @@ A viewer is a user who is watching and listening to other participants on the st
 
 #### `ExpoIVSStagePreviewView`
 
-A React Native component that renders the **local** camera preview for the publisher.
+A React Native component that renders the **local** camera preview for the publisher. This will only render a feed after `initializeLocalStreams()` has been successfully called.
 
 **Props**
 
@@ -69,8 +78,6 @@ A React Native component that renders the video stream of a single **remote** pa
 **Props**
 
 -   `style` (`StyleProp<ViewStyle>`): Standard view styling.
--   `participantId` (`string`): The unique ID of the remote participant you want to render.
--   `deviceUrn` (`string`): The unique URN of the participant's video stream you want to render.
 -   `scaleMode` (`'fit' | 'fill'`): Determines how the video should be scaled within the view bounds. Default is `'fill'`.
 
 ### Hooks
@@ -97,16 +104,15 @@ An object containing:
 
 All methods are asynchronous and return a `Promise`.
 
--   `initialize(audioConfig?, videoConfig?)`: Initializes the broadcast SDK. Must be called before any other stage operations.
--   `joinStage(token, options?)`: Joins a stage using a participant token.
+-   `initializeStage(audioConfig?, videoConfig?)`: Initializes the broadcast SDK with non-device-related configurations. It does **not** trigger permission prompts. This should be called once before any other stage operations.
+-   `initializeLocalStreams(audioConfig?, videoConfig?)`: Prepares the user's local camera and microphone for publishing. This is the method that will trigger system permission prompts. It must be called before using `ExpoIVSStagePreviewView` or publishing streams.
+-   `joinStage(token, options?)`: Joins a stage using a participant token. Can be called without `initializeLocalStreams` for a viewer-only role.
     -   `token` (`string`): The participant token from your backend.
-    -   `options` (`object`, optional): An object for extra options.
-        -   `targetParticipantId` (`string`, optional): If using the automatic rendering mode, this pins a specific participant's stream to the first available view.
 -   `leaveStage()`: Leaves the current stage.
--   `setStreamsPublished(published)`: Toggles the publishing of local video and audio streams.
--   `swapCamera()`: Switches between the front and back cameras.
--   `setMicrophoneMuted(muted)`: Mutes or unmutes the local microphone.
--   `requestPermissions()`: Checks the current status of camera and microphone permissions. On Android, this does **not** trigger the system permission dialog. Returns a `PermissionStatusMap`.
+-   `setStreamsPublished(published)`: Toggles the publishing of local streams. Requires `initializeLocalStreams` to have been called.
+-   `swapCamera()`: Switches between the front and back cameras. Requires `initializeLocalStreams` to have been called.
+-   `setMicrophoneMuted(muted)`: Mutes or unmutes the local microphone. Requires `initializeLocalStreams` to have been called.
+-   `requestPermissions()`: Checks and returns the current status of camera and microphone permissions without prompting the user.
 
 ### Event Listeners
 
@@ -117,23 +123,14 @@ You can subscribe to events from the native module. Each listener function retur
 -   `addOnPublishStateChangedListener(listener)`: Listens for changes in the local participant's publish state.
     -   Payload: `{ state: 'not_published' | 'attempting' | 'published' | 'failed', error?: string }`
 -   `addOnStageErrorListener(listener)`: Listens for fatal SDK errors.
-    -   Payload: `{ code: number, description: string, source: string, isFatal: boolean }`
 -   `addOnParticipantJoinedListener(listener)`: Fired when a remote participant joins the stage.
-    -   Payload: `{ participantId: string }`
 -   `addOnParticipantLeftListener(listener)`: Fired when a remote participant leaves the stage.
-    -   Payload: `{ participantId: string }`
 -   `addOnParticipantStreamsAddedListener(listener)`: Fired when a remote participant adds streams.
-    -   Payload: `{ participantId: string, streams: StageStream[] }`
 -   `addOnParticipantStreamsRemovedListener(listener)`: Fired when a remote participant removes streams.
-    -   Payload: `{ participantId: string, streams: { deviceUrn: string }[] }`
--   `addOnCameraSwappedListener(listener)`: Fired on a successful camera swap.
-    -   Payload: `{ newCameraURN: string, newCameraName: string }`
--   `addOnCameraSwapErrorListener(listener)`: Fired if a camera swap fails.
-    -   Payload: `{ reason: string }`
 
 ## Usage Example
 
-Here is a comprehensive example showing both publisher and viewer functionality.
+This example demonstrates how to build a UI that lets a user choose between being a "Viewer" or a "Publisher".
 
 ```tsx
 import React, { useState, useEffect } from 'react';
@@ -142,7 +139,8 @@ import {
   ExpoIVSStagePreviewView,
   ExpoIVSRemoteStreamView,
   useStageParticipants,
-  initialize,
+  initializeStage,
+  initializeLocalStreams,
   joinStage,
   leaveStage,
   setStreamsPublished,
@@ -150,19 +148,29 @@ import {
   addOnStageConnectionStateChangedListener,
 } from 'expo-realtime-ivs-broadcast';
 
-export default function BroadcastScreen() {
+// In a real app, you would fetch this from a secure backend server!
+const TOKEN = 'YOUR_PARTICIPANT_TOKEN';
+
+type Role = 'viewer' | 'publisher';
+
+export default function App() {
+  const [role, setRole] = useState<Role | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [isPublished, setIsPublished] = useState(false);
+  const [areLocalStreamsInitialized, setAreLocalStreamsInitialized] = useState(false);
+  
   const { participants } = useStageParticipants();
 
   useEffect(() => {
-    initialize();
+    // Initialize non-device-related SDK parts on mount.
+    initializeStage();
 
     const connectionSub = addOnStageConnectionStateChangedListener((data) => {
-      console.log('Connection state:', data.state);
-      setIsConnected(data.state === 'connected');
-      if (data.state !== 'connected') {
+      const connected = data.state === 'connected';
+      setIsConnected(connected);
+      if (!connected) {
         setIsPublished(false);
+        setAreLocalStreamsInitialized(false); // Reset on disconnect
       }
     });
 
@@ -172,11 +180,25 @@ export default function BroadcastScreen() {
     };
   }, []);
 
-  const handleJoin = () => {
-    // In a real app, fetch this from a secure backend server!
-    const token = 'YOUR_PARTICIPANT_TOKEN';
-    joinStage(token);
+  const handleJoin = async () => {
+    if (role === 'publisher' && !areLocalStreamsInitialized) {
+      // For publishers, initialize devices first. This will trigger permission prompts.
+      try {
+        await initializeLocalStreams();
+        setAreLocalStreamsInitialized(true);
+      } catch (error) {
+        console.error("Failed to initialize local streams:", error);
+        return; // Don't join if permissions are denied.
+      }
+    }
+    // For both roles, join the stage.
+    joinStage(TOKEN);
   };
+
+  const handleLeave = () => {
+    leaveStage();
+    setRole(null); // Go back to role selection
+  }
 
   const handleTogglePublish = () => {
     const newPublishState = !isPublished;
@@ -184,53 +206,63 @@ export default function BroadcastScreen() {
     setIsPublished(newPublishState); // Optimistic update
   };
 
+  // UI for choosing a role
+  if (!role) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.centered}>
+          <Text style={styles.header}>Choose Your Role</Text>
+          <Button title="Join as a Viewer" onPress={() => setRole('viewer')} />
+          <Button title="Join as a Publisher" onPress={() => setRole('publisher')} />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // Main UI for viewers and publishers
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.topContainer}>
-        <Text style={styles.header}>My Preview</Text>
-        <ExpoIVSStagePreviewView style={styles.localPreview} />
-      </View>
+      {/* Publisher-only view */}
+      {role === 'publisher' && areLocalStreamsInitialized && (
+        <View style={styles.halfScreen}>
+          <Text style={styles.header}>My Preview</Text>
+          <ExpoIVSStagePreviewView style={styles.preview} />
+        </View>
+      )}
 
-      <View style={styles.bottomContainer}>
+      {/* View for remote participants */}
+      <View style={styles.halfScreen}>
         <Text style={styles.header}>Remote Participants ({participants.length})</Text>
-        {participants.length === 0 ? (
-          <View style={styles.centered}>
-            <Text style={styles.emptyText}>No one else is here.</Text>
-          </View>
-        ) : (
-          <ScrollView horizontal style={styles.remoteScrollView}>
-            {participants.map(p => {
-              const videoStream = p.streams.find(s => s.mediaType === 'video');
-              // We use a key that changes when the video stream appears to ensure React creates a new component
-              return (
-                <View key={p.id + (videoStream?.deviceUrn ?? '')} style={styles.remoteViewWrapper}>
-                  {videoStream ? (
-                    <ExpoIVSRemoteStreamView
-                      style={styles.remoteView}
-                      participantId={p.id}
-                      deviceUrn={videoStream.deviceUrn}
-                    />
-                  ) : (
-                    <View style={styles.noVideoPlaceholder}>
-                      <Text style={styles.emptyText}>No Video</Text>
-                    </View>
-                  )}
-                  <Text style={styles.participantLabel}>{p.id.substring(0, 6)}</Text>
-                </View>
-              );
-            })}
-          </ScrollView>
-        )}
+        <ScrollView horizontal style={styles.scrollView}>
+          {participants.map(p => {
+            const videoStream = p.streams.find(s => s.mediaType === 'video');
+            return (
+              <View key={p.id} style={styles.participantView}>
+                {videoStream ? (
+                  <ExpoIVSRemoteStreamView style={styles.remoteVideo} />
+                ) : (
+                  <View style={styles.noVideo}><Text style={styles.text}>No Video</Text></View>
+                )}
+                <Text style={styles.participantLabel}>{p.id.substring(0, 6)}</Text>
+              </View>
+            );
+          })}
+        </ScrollView>
       </View>
 
+      {/* Controls */}
       <View style={styles.controls}>
         {!isConnected ? (
-          <Button title="Join Stage" onPress={handleJoin} />
+          <Button title={`Join as ${role}`} onPress={handleJoin} />
         ) : (
           <>
-            <Button title={isPublished ? 'Unpublish' : 'Publish'} onPress={handleTogglePublish} />
-            <Button title="Swap Cam" onPress={swapCamera} />
-            <Button title="Leave" onPress={leaveStage} color="red" />
+            <Button title="Leave" onPress={handleLeave} color="red" />
+            {role === 'publisher' && (
+              <>
+                <Button title={isPublished ? 'Unpublish' : 'Publish'} onPress={handleTogglePublish} />
+                <Button title="Swap Cam" onPress={swapCamera} />
+              </>
+            )}
           </>
         )}
       </View>
@@ -240,18 +272,17 @@ export default function BroadcastScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#111' },
-  topContainer: { flex: 1, margin: 10 },
-  bottomContainer: { flex: 1, borderTopWidth: 2, borderTopColor: '#333' },
-  header: { fontSize: 20, fontWeight: 'bold', color: 'white', padding: 10, textAlign: 'center' },
-  localPreview: { flex: 1, backgroundColor: 'black', borderRadius: 8 },
-  remoteScrollView: { flex: 1, paddingLeft: 10, paddingTop: 10 },
-  remoteViewWrapper: { width: 150, height: '90%', backgroundColor: 'black', marginRight: 10, borderRadius: 8, overflow: 'hidden' },
-  remoteView: { width: '100%', height: '100%' },
+  centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  halfScreen: { flex: 1 },
+  header: { fontSize: 18, color: 'white', padding: 10, textAlign: 'center' },
+  preview: { flex: 1, backgroundColor: 'black' },
+  scrollView: { flex: 1, paddingLeft: 10 },
+  participantView: { width: 150, height: '90%', backgroundColor: 'black', marginRight: 10, borderRadius: 8, overflow: 'hidden' },
+  remoteVideo: { width: '100%', height: '100%' },
+  noVideo: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#222' },
+  text: { color: '#888' },
   participantLabel: { position: 'absolute', bottom: 5, left: 5, color: 'white', backgroundColor: 'rgba(0,0,0,0.5)', padding: 3, borderRadius: 3, fontSize: 10 },
   controls: { paddingBottom: 40, paddingTop: 10, flexDirection: 'row', justifyContent: 'space-evenly', borderTopWidth: 1, borderTopColor: '#333' },
-  centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  emptyText: { color: '#888', fontSize: 16 },
-  noVideoPlaceholder: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#222' },
 });
 ```
 
