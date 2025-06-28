@@ -9,13 +9,15 @@ import {
   SafeAreaView,
   Platform,
   PermissionsAndroid,
-  Dimensions
+  Dimensions,
+  TouchableOpacity,
 } from 'react-native';
 import {
   ExpoIVSStagePreviewView,
   ExpoIVSRemoteStreamView,
   useStageParticipants,
-  initialize,
+  initializeStage,
+  initializeLocalStreams,
   joinStage,
   leaveStage,
   setStreamsPublished,
@@ -38,8 +40,11 @@ import {
 
 const { width } = Dimensions.get('window');
 
+type Role = 'viewer' | 'publisher';
+
 export default function App() {
-  const [token, setToken] = useState<string>('eyJhbGciOiJLTVMiLCJ0eXAiOiJKV1QifQ.eyJleHAiOjE3NTEwOTQ0NDUsImlhdCI6MTc1MTA1MTI0NSwianRpIjoiMURxRmROcmJTanlTIiwicmVzb3VyY2UiOiJhcm46YXdzOml2czphcC1zb3V0aC0xOjQ4MDYwOTMzMTcwNjpzdGFnZS9OQkZKb0plQ2l0ZGkiLCJ0b3BpYyI6Ik5CRkpvSmVDaXRkaSIsImV2ZW50c191cmwiOiJ3c3M6Ly9nbG9iYWwuZXZlbnRzLmxpdmUtdmlkZW8ubmV0Iiwid2hpcF91cmwiOiJodHRwczovL2I0NTg2OTFkMjBjOS5nbG9iYWwtYm0ud2hpcC5saXZlLXZpZGVvLm5ldCIsImNhcGFiaWxpdGllcyI6eyJhbGxvd19wdWJsaXNoIjp0cnVlLCJhbGxvd19zdWJzY3JpYmUiOnRydWV9LCJ2ZXJzaW9uIjoiMC4wIn0.MGYCMQCJWw4sglfjQqLyXNF3kIvRcLDyErhoEB-jmiRIwZ8ykltYp6mXf70GvD7eUVNLIlsCMQDGN_8TEBLrnyjbSeJGK3zsB5XoFbfObSeG39ytByibITv4t7A472Lsjtj0wYqca60'); // Store your IVS Stage token here
+  const [token, setToken] = useState<string>('YOUR_TOKEN_HERE'); // Store your IVS Stage token here
+  const [role, setRole] = useState<Role | null>(null);
   const [isPublished, setIsPublished] = useState<boolean>(false);
   const [isMuted, setIsMuted] = useState<boolean>(false);
   const [mirrorView, setMirrorView] = useState<boolean>(false);
@@ -50,6 +55,7 @@ export default function App() {
   const [lastError, setLastError] = useState<StageErrorPayload | null>(null);
   const [permissionStatus, setPermissionStatus] = useState<PermissionStatusMap | null>(null);
   const [lastSwapResult, setLastSwapResult] = useState<string | null>(null);
+  const [localStreamsInitialized, setLocalStreamsInitialized] = useState(false);
 
   // Use the new hook to get participant data
   const { participants } = useStageParticipants();
@@ -63,21 +69,16 @@ export default function App() {
     const connectionSub = addOnStageConnectionStateChangedListener((data) => {
       console.log('onStageConnectionStateChanged', data);
       setConnectionState(data);
-      if (data.state === 'connected') {
-        // setIsPublished(true); // Auto-publish on connect or wait for user action
-      } else if (data.state === 'disconnected') {
+      if (data.state === 'disconnected') {
         setIsPublished(false);
+        setLocalStreamsInitialized(false); // Reset on disconnect
       }
     });
 
     const publishSub = addOnPublishStateChangedListener((data) => {
       console.log('onPublishStateChanged', data);
       setPublishState(data);
-      if (data.state === 'published') {
-        setIsPublished(true);
-      } else if (data.state === 'not_published' || data.state === 'failed') {
-        setIsPublished(false);
-      }
+      setIsPublished(data.state === 'published');
     });
 
     const errorSub = addOnStageErrorListener((data) => {
@@ -94,11 +95,9 @@ export default function App() {
       console.error('onCameraSwapError', data);
       setLastSwapResult(`Error: ${data.reason}`);
     });
-
-    // Request permissions on mount for iOS, for Android it's a bit different
-    // but our requestPermissions() handles both within the native code for simplicity here.
-    handleRequestPermissions();
-    handleInitialize(); // Initialize on mount
+    
+    // Call the stage configuration initializer on mount for everyone
+    handleInitializeStage();
 
     return () => {
       connectionSub.remove();
@@ -106,56 +105,50 @@ export default function App() {
       errorSub.remove();
       cameraSwapSub.remove();
       cameraSwapErrorSub.remove();
-      // Optional: leaveStage on unmount if connected
-      // if (connectionState?.state === 'connected') {
-      //   handleLeaveStage();
-      // }
+      handleLeaveStage(); // Leave stage on unmount
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const handleInitialize = async () => {
+  const handleInitializeStage = async () => {
     try {
-      await initialize(); // Add audio/video configs if needed
-      console.log('SDK Initialized');
+      await initializeStage(); // Add audio/video configs if needed
+      console.log('SDK Initialized for Stage configuration');
     } catch (e) {
-      console.error('Initialize error:', e);
+      console.error('Initialize stage error:', e);
     }
   };
 
-  const handleRequestPermissions = async () => {
+  const handleInitializeLocalStreams = async () => {
     if (Platform.OS === 'android') {
-      try {
-        const granted = await PermissionsAndroid.requestMultiple([
-          PermissionsAndroid.PERMISSIONS.CAMERA,
-          PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
-        ]);
-        const cameraStatus = granted[PermissionsAndroid.PERMISSIONS.CAMERA] === 'granted' ? 'granted' : 'denied';
-        const microphoneStatus = granted[PermissionsAndroid.PERMISSIONS.RECORD_AUDIO] === 'granted' ? 'granted' : 'denied';
-        
-        const newStatus: PermissionStatusMap = { camera: cameraStatus, microphone: microphoneStatus };
-        setPermissionStatus(newStatus);
-        console.log('Android Permissions:', newStatus);
-
-        if (cameraStatus !== 'granted' || microphoneStatus !== 'granted') {
-          console.warn("Warning: Not all permissions were granted. The stream may not work as expected.");
+        // Android requires explicit permission request *before* initializing devices
+        try {
+            const granted = await PermissionsAndroid.requestMultiple([
+                PermissionsAndroid.PERMISSIONS.CAMERA,
+                PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
+            ]);
+            if (granted[PermissionsAndroid.PERMISSIONS.CAMERA] !== 'granted' || granted[PermissionsAndroid.PERMISSIONS.RECORD_AUDIO] !== 'granted') {
+                alert('Permissions required to go live.');
+                return;
+            }
+        } catch (err) {
+            console.warn(err);
+            return;
         }
-      } catch (err) {
-        console.warn(err);
-      }
-      return;
     }
 
-    // For iOS, our module's requestPermissions will check the status.
-    // The system dialog will appear automatically on first use of the camera/mic by the SDK.
     try {
+      await initializeLocalStreams();
+      console.log('Local streams initialized');
+      setLocalStreamsInitialized(true);
+      // On iOS, this is the first point where permission prompts will appear.
+      // We can check the result after.
       const status = await requestPermissions();
       setPermissionStatus(status);
-      console.log('iOS Permissions:', status);
     } catch (e) {
-      console.error('Request permissions error:', e);
+      console.error('Initialize local streams error:', e);
     }
   };
+
 
   const handleJoinStage = async () => {
     if (!token) {
@@ -174,6 +167,7 @@ export default function App() {
     try {
       await leaveStage();
       console.log('Left stage');
+      setRole(null); // Go back to role selection
     } catch (e) {
       console.error('Leave stage error:', e);
     }
@@ -182,7 +176,6 @@ export default function App() {
   const handleTogglePublish = async () => {
     try {
       await setStreamsPublished(!isPublished);
-      // The actual state will be updated via onPublishStateChanged event
     } catch (e) {
       console.error('Toggle publish error:', e);
     }
@@ -191,7 +184,6 @@ export default function App() {
   const handleSwapCamera = async () => {
     try {
       await swapCamera();
-      console.log('Swapped camera');
     } catch (e) {
       console.error('Swap camera error:', e);
     }
@@ -200,8 +192,7 @@ export default function App() {
   const handleToggleMute = async () => {
     try {
       await setMicrophoneMuted(!isMuted);
-      setIsMuted(!isMuted); // Optimistic update, or wait for an event if the SDK provides one
-      console.log('Toggled mute');
+      setIsMuted(!isMuted);
     } catch (e) {
       console.error('Toggle mute error:', e);
     }
@@ -210,111 +201,105 @@ export default function App() {
   const toggleMirror = () => setMirrorView(prev => !prev);
   const toggleScaleMode = () => setScaleMode(prev => prev === 'fill' ? 'fit' : 'fill');
 
-  return (
-    <SafeAreaView style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scrollContentContainer}>
-        <Text style={styles.header}>IVS Real-Time Demo</Text>
+  const renderRoleSelection = () => (
+    <View style={styles.centered}>
+      <Text style={styles.header}>Choose Your Role</Text>
+      <View style={styles.controlsRow}>
+        <Button title="Join as a Viewer" onPress={() => setRole('viewer')} />
+        <Button title="Join as a Publisher" onPress={() => setRole('publisher')} />
+      </View>
+    </View>
+  );
 
-        <View style={styles.group}>
-          <Text style={styles.groupHeader}>My Preview</Text>
-          <View style={styles.previewContainer}>
-            <ExpoIVSStagePreviewView 
-              style={styles.preview} 
-              mirror={mirrorView}
-              scaleMode={scaleMode}
-            />
+  const renderSessionUI = () => (
+    <ScrollView contentContainerStyle={styles.scrollContentContainer}>
+        <Text style={styles.header}>IVS Real-Time Demo ({role})</Text>
+
+        {role === 'publisher' && (
+          <View style={styles.group}>
+            <Text style={styles.groupHeader}>My Preview</Text>
+            {localStreamsInitialized ? (
+              <>
+                <View style={styles.previewContainer}>
+                  <ExpoIVSStagePreviewView 
+                    style={styles.preview} 
+                    mirror={mirrorView}
+                    scaleMode={scaleMode}
+                  />
+                </View>
+                <View style={styles.controlsRow}>
+                    <Button title={mirrorView ? "Unmirror" : "Mirror"} onPress={toggleMirror} />
+                    <Button title={`Scale: ${scaleMode}`} onPress={toggleScaleMode} />
+                </View>
+              </>
+            ) : (
+              <Button title="Start Camera & Mic (Go Live)" onPress={handleInitializeLocalStreams} />
+            )}
           </View>
-          <View style={styles.controlsRow}>
-              <Button title={mirrorView ? "Unmirror" : "Mirror"} onPress={toggleMirror} />
-              <Button title={`Scale: ${scaleMode}`} onPress={toggleScaleMode} />
-          </View>
-        </View>
+        )}
 
         <View style={styles.group}>
           <Text style={styles.groupHeader}>Remote Participants ({participants.length})</Text>
             <ScrollView horizontal style={styles.remoteStreamsContainer}>
               {participants.map(p => {
-            // Find the video stream for the participant
-            const videoStream = p.streams.find(s => s.mediaType === 'video');
-            
-            // --- THE FINAL FIX IS HERE ---
-            // We create a unique key. When the participant has no video, the key is just their ID.
-            // As soon as `videoStream` becomes available, the key changes to "ID + URN".
-            // React sees this new key and unmounts the old placeholder, creating a
-            // brand new <ExpoIVSRemoteStreamView> with the correct props from the very start.
-            const key = p.id + (videoStream?.deviceUrn ?? '');
+                const videoStream = p.streams.find(s => s.mediaType === 'video');
+                const key = p.id + (videoStream?.deviceUrn ?? '');
 
-            return (
-              <View key={key} style={styles.remoteStreamWrapper}>
-                {videoStream ? (
-                  <ExpoIVSRemoteStreamView
-                    style={styles.remoteStream}
-                    participantId={p.id}
-                    deviceUrn={videoStream.deviceUrn}
-                    scaleMode="fill"
-                  />
-                ) : (
-                  <View style={styles.remoteStreamPlaceholder}>
-                    <Text style={styles.remoteStreamText}>{(p.id || '...').substring(0, 8)}</Text>
-                    <Text style={styles.remoteStreamText}>(No Video)</Text>
+                return (
+                  <View key={key} style={styles.remoteStreamWrapper}>
+                    {videoStream ? (
+                      <ExpoIVSRemoteStreamView
+                        style={styles.remoteStream}
+                      />
+                    ) : (
+                      <View style={[styles.remoteStream, styles.placeholder]}>
+                        <Text style={styles.placeholderText}>{p.id.substring(0, 8)} (Audio Only)</Text>
+                      </View>
+                    )}
+                    <Text style={styles.participantLabel}>{p.id.substring(0, 8)}</Text>
                   </View>
-                )}
-                <Text style={styles.remoteStreamLabel}>{(p.id || '...').substring(0, 8)}</Text>
-              </View>
-            );
-          })}
+                );
+              })}
             </ScrollView>
-
         </View>
 
         <View style={styles.group}>
-          <Text style={styles.groupHeader}>Permissions</Text>
-          <Button title="Request Cam/Mic Permissions" onPress={handleRequestPermissions} />
-          <Text>Camera: {permissionStatus?.camera}</Text>
-          <Text>Microphone: {permissionStatus?.microphone}</Text>
-        </View>
-
-        <View style={styles.group}>
-          <Text style={styles.groupHeader}>Stage Control</Text>
-          <Button title="Initialize SDK" onPress={handleInitialize} />
+          <Text style={styles.groupHeader}>Session Controls</Text>
           <TextInput
             style={styles.input}
-            placeholder="Enter IVS Stage Token"
+            placeholder="Enter Stage Token"
             value={token}
             onChangeText={setToken}
             secureTextEntry
           />
-          <Button title="Join Stage" onPress={handleJoinStage} disabled={!token || connectionState?.state === 'connected'} />
-          <Button title="Leave Stage" onPress={handleLeaveStage} disabled={connectionState?.state !== 'connected'} />
-        </View>
-
-        <View style={styles.group}>
-          <Text style={styles.groupHeader}>Stream Control</Text>
-          <Button 
-            title={isPublished ? "Unpublish Streams" : "Publish Streams"} 
-            onPress={handleTogglePublish} 
-            disabled={connectionState?.state !== 'connected'}
-          />
-          <Button 
-            title={isMuted ? "Unmute Mic" : "Mute Mic"} 
-            onPress={handleToggleMute} 
-            disabled={connectionState?.state !== 'connected'} 
-          />
-          <Button title="Swap Camera" onPress={handleSwapCamera} disabled={connectionState?.state !== 'connected'} />
-        </View>
-
-        <View style={styles.group}>
-          <Text style={styles.groupHeader}>Event Status</Text>
-          <Text>Connection: {connectionState?.state || '-'} {connectionState?.error ? `(Error: ${connectionState.error})`: ''}</Text>
-          <Text>Publish: {publishState?.state || '-'} {publishState?.error ? `(Error: ${publishState.error})`: ''}</Text>
-          <Text>Last Swap: {lastSwapResult || '-'}</Text>
-          {lastError && (
-            <Text style={{color: 'red'}}>
-              Last Error: {lastError.description} (Code: {lastError.code}, Source: {lastError.source}, Fatal: {String(lastError.isFatal)})
-            </Text>
+          <View style={styles.controlsRow}>
+            <Button title="Join" onPress={handleJoinStage} disabled={connectionState?.state === 'connected'} />
+            <Button title="Leave" onPress={handleLeaveStage} disabled={connectionState?.state !== 'connected'} />
+          </View>
+          {role === 'publisher' && (
+             <View style={styles.controlsRow}>
+               <Button title={isPublished ? 'Unpublish' : 'Publish'} onPress={handleTogglePublish} disabled={!localStreamsInitialized || connectionState?.state !== 'connected'} />
+               <Button title="Swap Cam" onPress={handleSwapCamera} disabled={!localStreamsInitialized} />
+               <Button title={isMuted ? 'Unmute' : 'Mute'} onPress={handleToggleMute} disabled={!localStreamsInitialized} />
+             </View>
           )}
         </View>
+
+        <View style={styles.group}>
+          <Text style={styles.groupHeader}>Status</Text>
+          <Text>Connection: {connectionState?.state ?? 'not connected'}</Text>
+          <Text>Publish: {publishState?.state ?? 'not published'}</Text>
+          <Text>Participants: {participants.length}</Text>
+          <Text>Permissions: Camera - {permissionStatus?.camera}, Mic - {permissionStatus?.microphone}</Text>
+          <Text>Last Swap: {lastSwapResult ?? 'N/A'}</Text>
+          {lastError && <Text style={{ color: 'red' }}>Error: {lastError.description}</Text>}
+        </View>
       </ScrollView>
+  );
+
+  return (
+    <SafeAreaView style={styles.container}>
+      {role ? renderSessionUI() : renderRoleSelection()}
     </SafeAreaView>
   );
 }
@@ -322,110 +307,92 @@ export default function App() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f0f0f0',
+    backgroundColor: '#F5FCFF',
   },
   scrollContentContainer: {
-    paddingBottom: 50, // Ensure scroll content isn't hidden by nav bars etc.
+    padding: 16,
+  },
+  centered: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   header: {
     fontSize: 24,
     fontWeight: 'bold',
+    marginBottom: 20,
     textAlign: 'center',
-    marginVertical: 20,
-    color: '#333'
+  },
+  group: {
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 8,
+    padding: 10,
+  },
+  groupHeader: {
+    fontSize: 18,
+    fontWeight: '600',
+    marginBottom: 10,
   },
   previewContainer: {
     width: '100%',
-    aspectRatio: 9 / 16, // Portrait aspect ratio
-    backgroundColor: '#000',
+    aspectRatio: 9 / 16,
+    backgroundColor: 'black',
     marginBottom: 10,
     borderRadius: 8,
     overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: '#ddd'
   },
   preview: {
     flex: 1,
   },
-  controlsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    alignItems: 'center',
-    marginBottom: 20,
-    paddingHorizontal: 10,
-  },
-  group: {
-    marginHorizontal: 15,
-    marginVertical: 10,
-    backgroundColor: '#fff',
-    borderRadius: 8,
-    padding: 15,
-    shadowColor: "#000",
-    shadowOffset: {
-      width: 0,
-      height: 1,
-    },
-    shadowOpacity: 0.22,
-    shadowRadius: 2.22,
-    elevation: 3,
-  },
-  groupHeader: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 10,
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: '#ccc',
-    borderRadius: 5,
-    padding: 10,
-    marginBottom: 10,
-    fontSize: 16,
-  },
   remoteStreamsContainer: {
-    paddingVertical: 10,
+    flexDirection: 'row',
   },
   remoteStreamWrapper: {
-    width: 120,
-    height: 120 * (16 / 9),
-    backgroundColor: '#2e2e2e',
+    width: width / 2.5,
+    aspectRatio: 9 / 16,
     marginRight: 10,
+    backgroundColor: 'black',
     borderRadius: 8,
     overflow: 'hidden',
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#444',
   },
   remoteStream: {
+    flex: 1,
     width: '100%',
-    height: '100%',
   },
-  remoteStreamLabel: {
-    position: 'absolute',
-    bottom: 5,
-    left: 5,
-    color: 'white',
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    paddingHorizontal: 5,
-    paddingVertical: 2,
-    borderRadius: 4,
-    fontSize: 10,
-    fontWeight: 'bold',
-  },
-  remoteStreamPlaceholder: {
-    width: 120,
-    height: 120 * (16 / 9),
-    backgroundColor: '#3e3e3e',
-    marginRight: 10,
-    borderRadius: 8,
+  placeholder: {
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 5,
+    backgroundColor: '#222',
   },
-  remoteStreamText: {
-    color: '#b0b0b0',
+  placeholderText: {
+    color: 'white',
+  },
+  participantLabel: {
+    position: 'absolute',
+    bottom: 8,
+    left: 8,
+    color: 'white',
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
     fontSize: 12,
-    textAlign: 'center',
+  },
+  input: {
+    height: 40,
+    borderColor: 'gray',
+    borderWidth: 1,
+    marginBottom: 10,
+    paddingHorizontal: 8,
+    borderRadius: 4,
+  },
+  controlsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginBottom: 10,
   },
 });

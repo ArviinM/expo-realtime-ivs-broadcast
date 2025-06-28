@@ -5,7 +5,8 @@ import { LocalAudioConfig, LocalVideoConfig, PermissionStatusMap, ExpoRealtimeIv
 // By defining `addListener` and `removeListeners` explicitly, we get strong type-checking
 // for our event names and payloads, resolving the 'never' type error.
 export type ExpoRealtimeIvsBroadcastModuleType = {
-  initialize(audioConfig?: LocalAudioConfig, videoConfig?: LocalVideoConfig): Promise<void>;
+  initializeStage(audioConfig?: LocalAudioConfig, videoConfig?: LocalVideoConfig): Promise<void>;
+  initializeLocalStreams(audioConfig?: LocalAudioConfig, videoConfig?: LocalVideoConfig): Promise<void>;
   joinStage(token: string, options?: { targetParticipantId?: string }): Promise<void>;
   leaveStage(): Promise<void>;
   setStreamsPublished(published: boolean): Promise<void>;

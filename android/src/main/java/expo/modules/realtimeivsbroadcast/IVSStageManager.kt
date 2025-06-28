@@ -47,7 +47,6 @@ class IVSStageManager(private val context: Context) : Stage.Strategy, StageRende
 
     init {
         instance = this
-        discoverDevices()
     }
 
     private fun discoverDevices() {
@@ -75,25 +74,32 @@ class IVSStageManager(private val context: Context) : Stage.Strategy, StageRende
         return localCamera
     }
 
-    fun initializeStage(audioConfig: StageAudioConfiguration? = null, videoConfig: StageVideoConfiguration? = null) {
+    fun initializeLocalStreams() {
+        discoverDevices()
 
-        // Get all available devices first
-        if (localCamera == null || localMicrophone == null) {
-            discoverDevices()
+        if (cameraStream == null && localCamera != null) {
+            cameraStream = ImageLocalStageStream(localCamera!!, this.stageConfiguration.videoConfiguration)
+        }
+        if (microphoneStream == null && localMicrophone != null) {
+            microphoneStream = AudioLocalStageStream(localMicrophone!!, this.stageConfiguration.audioConfiguration)
         }
 
+        Log.i("ExpoIVSStageManager", "✅ IVSStageManager: Local streams initialized.")
+    }
+
+    fun initializeStage(audioConfig: StageAudioConfiguration? = null, videoConfig: StageVideoConfiguration? = null) {
         // Setup audio configuration
         val audioConfiguration = StageAudioConfiguration()
         val finalAudioConfig = audioConfig ?: audioConfiguration
-        audioConfiguration.maxBitrate.let { audioConfiguration.maxBitrate = (it as Number).toInt() }
-        
+        finalAudioConfig.maxBitrate?.let { (it as? Number)?.toInt()?.let { br -> finalAudioConfig.maxBitrate = br } }
+
         // Setup video configuration
         val videoConfiguration = StageVideoConfiguration()
         val finalVideoConfig = videoConfig ?: videoConfiguration
-        videoConfiguration.targetFramerate.let { videoConfiguration.targetFramerate = (it as Number).toInt() }
-        videoConfiguration.maxBitrate.let { videoConfiguration.maxBitrate = (it as Number).toInt() }
-        videoConfiguration.minBitrate.let { videoConfiguration.minBitrate = (it as Number).toInt() }
-        videoConfiguration.setSize(
+        finalVideoConfig.targetFramerate?.let { (it as? Number)?.toInt()?.let { fr -> finalVideoConfig.targetFramerate = fr } }
+        finalVideoConfig.maxBitrate?.let { (it as? Number)?.toInt()?.let { br -> finalVideoConfig.maxBitrate = br } }
+        finalVideoConfig.minBitrate?.let { (it as? Number)?.toInt()?.let { br -> finalVideoConfig.minBitrate = br } }
+        finalVideoConfig.setSize(
             BroadcastConfiguration.Vec2(
                 720F, 1280F
             )
@@ -102,26 +108,12 @@ class IVSStageManager(private val context: Context) : Stage.Strategy, StageRende
         this.stageConfiguration.audioConfiguration = finalAudioConfig
         this.stageConfiguration.videoConfiguration = finalVideoConfig
 
-
-        if (cameraStream == null && localCamera != null) {
-            cameraStream = ImageLocalStageStream(localCamera!!, finalVideoConfig)
-        }
-        if (microphoneStream == null && localMicrophone != null) {
-            microphoneStream = AudioLocalStageStream(localMicrophone!!, finalAudioConfig)
-        }
-
         Log.i("ExpoIVSStageManager", "✅ IVSStageManager: Stage Initialized with custom configurations.")
     }
 
     fun joinStage(token: String, targetId: String?) {
-        if (cameraStream == null || microphoneStream == null) {
-            Log.e("ExpoIVSStageManager", "❌ Error: Streams not initialized. Call initializeStage first.")
-            delegate?.stageManagerDidEmitEvent("onStageError", mapOf("description" to "Streams not initialized."))
-            return
-        }
-
         this.targetParticipantId = targetId
-        
+
         // The stage must be joined on the main thread.
         Handler(Looper.getMainLooper()).post {
             try {
