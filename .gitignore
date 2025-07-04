@@ -11,7 +11,8 @@ jsconfig.json
 
 # Xcode
 #
-build/
+# build/
+android/build
 *.pbxuser
 !default.pbxuser
 *.mode1v3

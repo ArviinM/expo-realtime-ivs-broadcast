@@ -1,9 +1,7 @@
 import * as React from 'react';
-
 // import { ExpoRealtimeIvsBroadcastViewProps } from './ExpoRealtimeIvsBroadcast.types';
-
 export default function ExpoRealtimeIvsBroadcastView() {
-  return (
+    return (
     // <div>
     //   <iframe
     //     style={{ flex: 1 }}
@@ -13,6 +11,6 @@ export default function ExpoRealtimeIvsBroadcastView() {
     // </div>
     <div>
       <h1>Hello World</h1>
-    </div>
-  )
+    </div>);
 }
+//# sourceMappingURL=ExpoRealtimeIvsBroadcastView.web.js.map
