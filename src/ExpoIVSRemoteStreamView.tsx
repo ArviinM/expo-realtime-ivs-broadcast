@@ -7,6 +7,5 @@ const NativeView: React.ComponentType<ExpoIVSRemoteStreamViewProps> =
   requireNativeViewManager('ExpoRealtimeIvsBroadcast_ExpoIVSRemoteStreamView');
 
 export function ExpoIVSRemoteStreamView(props: ExpoIVSRemoteStreamViewProps) {
-  console.log('[ExpoIVSRemoteStreamView] Rendering with props:', JSON.stringify(props));
   return <NativeView {...props} />;
 }
