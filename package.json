@@ -1,9 +1,16 @@
 {
   "name": "expo-realtime-ivs-broadcast",
   "version": "0.1.0",
-  "description": "My new module",
+  "description": "An Expo module for real-time broadcasting using Amazon IVS.",
   "main": "build/index.js",
   "types": "build/index.d.ts",
+  "files": [
+    "build",
+    "src",
+    "ios",
+    "android",
+    "expo-module.config.json"
+  ],
   "scripts": {
     "build": "expo-module build",
     "clean": "expo-module clean",
