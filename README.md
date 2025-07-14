@@ -9,7 +9,7 @@ This module provides React Native components and a comprehensive API to integrat
 Install the package in your Expo project:
 
 ```bash
-npx expo install github:ArviinM/expo-realtime-ivs-broadcast
+npx expo install expo-realtime-ivs-broadcast
 ```
 
 ## Configuration
