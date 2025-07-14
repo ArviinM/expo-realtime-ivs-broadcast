@@ -1,5 +1,7 @@
 # Expo Real-time IVS Broadcast
 
+**Note on Stability:** This library is currently in an early and unstable development phase. While the core functionalities—such as connecting to an Amazon IVS stage, publishing your local camera/microphone, and subscribing to remote participant streams—are operational, many other features have not been thoroughly tested. Please use with caution in production environments. We welcome contributions and bug reports to help stabilize the module.
+
 This module provides React Native components and a comprehensive API to integrate [Amazon IVS Real-Time Streaming](https://docs.aws.amazon.com/ivs/latest/RealTimeUserGuide/what-is.html) into your Expo application. It acts as a wrapper around the native Amazon IVS Broadcast SDK for both iOS and Android, allowing you to both publish your own camera/microphone and subscribe to remote participants' streams.
 
 ## Installation
