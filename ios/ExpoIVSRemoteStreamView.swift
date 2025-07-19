@@ -12,7 +12,7 @@ class ExpoIVSRemoteStreamView: ExpoView {
     private(set) var currentRenderedDeviceUrn: String?
 
     // No more participantId or deviceUrn props!
-    var scaleMode: String = "fit" {
+    var scaleMode: String = "fill" {
         didSet { updateScaleMode() }
     }
 
@@ -108,6 +108,14 @@ class ExpoIVSRemoteStreamView: ExpoView {
     }
 
     private func updateScaleMode() {
-        ivsImagePreviewView?.contentMode = (scaleMode.lowercased() == "fill") ? .scaleAspectFill : .scaleAspectFit
+        // This method now safely uses optional chaining, applying mode only if view exists.
+        switch scaleMode.lowercased() {
+        case "fill":
+            ivsImagePreviewView?.contentMode = .scaleAspectFill
+        case "fit":
+            ivsImagePreviewView?.contentMode = .scaleAspectFit
+        default:
+            ivsImagePreviewView?.contentMode = .scaleAspectFill // Default to fill
+        }
     }
 }

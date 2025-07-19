@@ -21,7 +21,7 @@ class ExpoIVSStagePreviewView(context: Context, appContext: AppContext) : ExpoVi
 
     // Props from React Native
     private var mirror: Boolean = false
-    private var scaleMode: String = "fit"
+    private var scaleMode: String = "fill"
 
     init {
         Log.i("ExpoIVSStagePreviewView", "Initializing Stage Preview View...")
