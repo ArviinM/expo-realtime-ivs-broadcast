@@ -23,7 +23,7 @@ class ExpoIVSRemoteStreamView(context: Context, appContext: AppContext) : ExpoVi
         private set
 
     // Props
-    private var scaleMode: String = "fit"
+    private var scaleMode: String = "fill"
 
     init {
         Log.i("ExpoIVSRemoteStreamView", "Initializing Remote Stream View...")

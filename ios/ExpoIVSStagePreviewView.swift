@@ -16,7 +16,7 @@ class ExpoIVSStagePreviewView: ExpoView {
         }
     }
 
-    var scaleMode: String = "fit" { // "fit" or "fill"
+    var scaleMode: String = "fill" { // "fit" or "fill"
         didSet {
             // This will update scale mode if/when ivsImagePreviewView is available
             updateScaleMode()
@@ -129,7 +129,7 @@ class ExpoIVSStagePreviewView: ExpoView {
         case "fit":
             ivsImagePreviewView?.contentMode = .scaleAspectFit
         default:
-            ivsImagePreviewView?.contentMode = .scaleAspectFit // Default to fit
+            ivsImagePreviewView?.contentMode = .scaleAspectFill // Default to fill
         }
     }
     
