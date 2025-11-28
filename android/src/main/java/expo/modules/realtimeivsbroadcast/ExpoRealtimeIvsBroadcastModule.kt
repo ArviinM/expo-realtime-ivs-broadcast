@@ -5,6 +5,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import androidx.annotation.RequiresApi
 import androidx.core.content.ContextCompat
+import android.util.Log
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 import expo.modules.kotlin.exception.Exceptions
@@ -25,9 +26,13 @@ class ExpoRealtimeIvsBroadcastModule : Module(), IVSStageManagerDelegate {
         )
 
         OnCreate {
+            Log.i("ExpoRealtimeIvsBroadcast", "Module OnCreate - Initializing IVSStageManager...")
             if (IVSStageManager.instance == null) {
                 val reactContext = appContext.reactContext ?: throw Exceptions.ReactContextLost()
                 IVSStageManager(reactContext)
+                Log.i("ExpoRealtimeIvsBroadcast", "IVSStageManager instance created")
+            } else {
+                Log.i("ExpoRealtimeIvsBroadcast", "IVSStageManager instance already exists")
             }
             IVSStageManager.instance?.delegate = this@ExpoRealtimeIvsBroadcastModule
         }

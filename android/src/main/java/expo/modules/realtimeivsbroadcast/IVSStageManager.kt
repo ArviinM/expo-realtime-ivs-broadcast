@@ -26,6 +26,7 @@ class IVSStageManager(private val context: Context) : Stage.Strategy, StageRende
     private var cameraStream: ImageLocalStageStream? = null
     private var microphoneStream: AudioLocalStageStream? = null
     private var stageConfiguration: StageConfiguration = StageConfiguration()
+    private val mainHandler = Handler(Looper.getMainLooper())
 
     // To keep track of available cameras for swapping
     private var availableCameras: List<Device> = emptyList()
@@ -37,6 +38,7 @@ class IVSStageManager(private val context: Context) : Stage.Strategy, StageRende
     // State management properties
     val participants = mutableListOf<StageParticipant>()
     private val remoteViews = mutableListOf<WeakReference<ExpoIVSRemoteStreamView>>()
+    private val previewViews = mutableListOf<WeakReference<ExpoIVSStagePreviewView>>()
     private var targetParticipantId: String? = null
 
     companion object {
@@ -47,6 +49,7 @@ class IVSStageManager(private val context: Context) : Stage.Strategy, StageRende
 
     init {
         instance = this
+        Log.i("ExpoIVSStageManager", "✅ IVSStageManager singleton instance created")
     }
 
     private fun discoverDevices() {
@@ -165,12 +168,58 @@ class IVSStageManager(private val context: Context) : Stage.Strategy, StageRende
         localCamera = newCamera
         cameraStream = ImageLocalStageStream(newCamera)
         stage?.refreshStrategy()
-        Log.i("ExpoIVSStageManager", "✅ Camera swapped successfully.")
+        Log.i("ExpoIVSStageManager", "✅ Camera swapped to: ${newCamera.descriptor.friendlyName}")
+        
+        // Notify all preview views to refresh with the new camera
+        notifyPreviewViewsToRefresh()
+    }
+    
+    private fun notifyPreviewViewsToRefresh() {
+        // Clean up null weak references
+        previewViews.removeAll { it.get() == null }
+        
+        Log.i("ExpoIVSStageManager", "🧠 [MANAGER] Notifying ${previewViews.count { it.get() != null }} preview views to refresh")
+        
+        mainHandler.post {
+            previewViews.mapNotNull { it.get() }.forEach { view ->
+                view.refreshPreview()
+            }
+        }
+    }
+    
+    // MARK: - Preview View Management
+    
+    fun registerPreviewView(view: ExpoIVSStagePreviewView) {
+        // Clean up any null references first
+        previewViews.removeAll { it.get() == null }
+        
+        // Check if this view is already registered
+        if (previewViews.any { it.get() === view }) {
+            Log.w("ExpoIVSStageManager", "🧠 [MANAGER] Preview view already registered, skipping...")
+            return
+        }
+        
+        previewViews.add(WeakReference(view))
+        Log.i("ExpoIVSStageManager", "🧠 [MANAGER] A preview view has registered. Total preview views: ${previewViews.count { it.get() != null }}")
+    }
+
+    fun unregisterPreviewView(view: ExpoIVSStagePreviewView) {
+        previewViews.removeAll { it.get() == view }
+        Log.i("ExpoIVSStageManager", "🧠 [MANAGER] A preview view has unregistered. Total preview views: ${previewViews.count { it.get() != null }}")
     }
 
     // MARK: - View Management
 
     fun registerRemoteView(view: ExpoIVSRemoteStreamView) {
+        // Clean up any null references first
+        remoteViews.removeAll { it.get() == null }
+        
+        // Check if this view is already registered
+        if (remoteViews.any { it.get() === view }) {
+            Log.w("ExpoIVSStageManager", "🧠 [MANAGER] View already registered, skipping...")
+            return
+        }
+        
         remoteViews.add(WeakReference(view))
         Log.i("ExpoIVSStageManager", "🧠 [MANAGER] A remote view has registered. Total views: ${remoteViews.count { it.get() != null }}")
         assignStreamsToAvailableViews()
@@ -182,17 +231,45 @@ class IVSStageManager(private val context: Context) : Stage.Strategy, StageRende
     }
 
     private fun assignStreamsToAvailableViews() {
+        // Ensure we're on the main thread for UI operations
+        if (Looper.myLooper() != Looper.getMainLooper()) {
+            mainHandler.post { assignStreamsToAvailableViews() }
+            return
+        }
+
         Log.i("ExpoIVSStageManager", "🧠 [MANAGER] Assigning streams to views...")
+        Log.i("ExpoIVSStageManager", "🧠 [MANAGER] Total participants: ${participants.size}")
+        
+        // Clean up null weak references
+        remoteViews.removeAll { it.get() == null }
+        
         val renderedUrns = remoteViews.mapNotNull { it.get()?.currentRenderedDeviceUrn }.toSet()
         val availableViews = remoteViews.mapNotNull { it.get() }.filter { it.currentRenderedDeviceUrn == null }
 
+        Log.i("ExpoIVSStageManager", "🧠 [MANAGER] Rendered URNs: $renderedUrns")
+        Log.i("ExpoIVSStageManager", "🧠 [MANAGER] Available views count: ${availableViews.size}")
+
         val availableStreams = participants.flatMap { p ->
+            Log.i("ExpoIVSStageManager", "🧠 [MANAGER] Participant ${p.info.participantId} has ${p.streams.size} streams")
             p.streams
-                .filter { it.streamType == StageStream.Type.VIDEO && !renderedUrns.contains(it.device.descriptor.urn) }
+                .filter { 
+                    val isVideo = it.streamType == StageStream.Type.VIDEO
+                    val notRendered = !renderedUrns.contains(it.device.descriptor.urn)
+                    Log.i("ExpoIVSStageManager", "🧠 [MANAGER]   Stream URN: ${it.device.descriptor.urn}, isVideo: $isVideo, notRendered: $notRendered")
+                    isVideo && notRendered
+                }
                 .map { stream -> Pair(p.info.participantId, stream) }
         }
 
         Log.i("ExpoIVSStageManager", "🧠 [MANAGER] Found ${availableViews.size} available views and ${availableStreams.size} available streams.")
+
+        if (availableViews.isEmpty() && availableStreams.isNotEmpty()) {
+            Log.w("ExpoIVSStageManager", "🧠 [MANAGER] ⚠️ Streams available but no views to render them!")
+        }
+        
+        if (availableStreams.isEmpty() && availableViews.isNotEmpty()) {
+            Log.w("ExpoIVSStageManager", "🧠 [MANAGER] ⚠️ Views available but no streams to render!")
+        }
 
         availableViews.zip(availableStreams).forEach { (view, streamInfo) ->
             Log.i("ExpoIVSStageManager", "🧠 [MANAGER] Assigning stream ${streamInfo.second.device.descriptor.urn} to a view.")
@@ -317,4 +394,4 @@ class IVSStageManager(private val context: Context) : Stage.Strategy, StageRende
         delegate?.stageManagerDidEmitEvent("onStageError", mapOf("description" to exception.localizedMessage))
         Log.e("ExpoIVSStageManager", "❌ Renderer: Received error: ${exception.localizedMessage}")
     }
-} 
+}

@@ -18,7 +18,7 @@ Pod::Spec.new do |s|
   s.static_framework = true
 
   s.dependency 'ExpoModulesCore'
-  s.dependency 'AmazonIVSBroadcast/Stages', '~> 1.30.0'
+  s.dependency 'AmazonIVSBroadcast/Stages', '~> 1.36.0'
 
   # Swift/Objective-C compatibility
   s.pod_target_xcconfig = {

@@ -2,8 +2,9 @@ package expo.modules.realtimeivsbroadcast
 
 import android.content.Context
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
-import android.view.View
 import android.widget.FrameLayout
 import androidx.annotation.RequiresApi
 import com.amazonaws.ivs.broadcast.BroadcastConfiguration.AspectMode
@@ -14,10 +15,15 @@ import expo.modules.kotlin.views.ExpoView
 
 @RequiresApi(Build.VERSION_CODES.P)
 class ExpoIVSStagePreviewView(context: Context, appContext: AppContext) : ExpoView(context, appContext) {
-    // This will hold the native view created by the IVS SDK
     private var ivsImagePreviewView: ImagePreviewView? = null
     private var stageManager: IVSStageManager? = null
     private var currentPreviewDeviceUrn: String? = null
+    private val mainHandler = Handler(Looper.getMainLooper())
+
+    // Retry configuration
+    private var retryCount = 0
+    private val maxRetries = 15
+    private val retryDelayMs = 300L
 
     // Props from React Native
     private var mirror: Boolean = false
@@ -25,32 +31,49 @@ class ExpoIVSStagePreviewView(context: Context, appContext: AppContext) : ExpoVi
 
     init {
         Log.i("ExpoIVSStagePreviewView", "Initializing Stage Preview View...")
-        resolveStageManagerAndStream()
+        resolveStageManagerAndStreamWithRetry()
     }
 
-    private fun resolveStageManagerAndStream() {
-        Log.d("ExpoIVSStagePreviewView", "Attempting to resolve StageManager singleton...")
-        this.stageManager = IVSStageManager.instance
+    private fun resolveStageManagerAndStreamWithRetry() {
+        Log.d("ExpoIVSStagePreviewView", "Attempting to resolve StageManager (attempt ${retryCount + 1})...")
         
-        if (this.stageManager == null) {
-            Log.e("ExpoIVSStagePreviewView", "IVSStageManager singleton instance is null.")
+        val manager = IVSStageManager.instance
+        
+        if (manager == null) {
+            if (retryCount < maxRetries) {
+                retryCount++
+                Log.w("ExpoIVSStagePreviewView", "IVSStageManager not ready, retrying in ${retryDelayMs}ms...")
+                mainHandler.postDelayed({ resolveStageManagerAndStreamWithRetry() }, retryDelayMs)
+            } else {
+                Log.e("ExpoIVSStagePreviewView", "IVSStageManager singleton is null after $maxRetries attempts.")
+            }
             return
         }
-        Log.d("ExpoIVSStagePreviewView", "StageManager instance assigned. Attaching stream...")
-        attachStream()
+        
+        this.stageManager = manager
+        Log.d("ExpoIVSStagePreviewView", "StageManager instance assigned. Registering view and attaching stream...")
+        manager.registerPreviewView(this)
+        attachStreamWithRetry()
     }
 
-    private fun attachStream() {
-        // In Android SDK, we get the device and create a preview from it.
-        // The logic here mirrors the Swift implementation.
+    private fun attachStreamWithRetry() {
         val cameraDevice = this.stageManager?.getLocalCameraDevice()
 
         if (cameraDevice == null) {
-            if (ivsImagePreviewView != null) {
-                removeView(ivsImagePreviewView)
-                ivsImagePreviewView = null
-                currentPreviewDeviceUrn = null
+            // Camera not ready yet, retry
+            if (retryCount < maxRetries) {
+                retryCount++
+                Log.w("ExpoIVSStagePreviewView", "Camera device not ready, retrying in ${retryDelayMs}ms...")
+                mainHandler.postDelayed({ attachStreamWithRetry() }, retryDelayMs)
+            } else {
+                Log.e("ExpoIVSStagePreviewView", "Camera device not available after $maxRetries attempts.")
             }
+            return
+        }
+
+        // Ensure we're on the main thread
+        if (Looper.myLooper() != Looper.getMainLooper()) {
+            mainHandler.post { attachStreamWithRetry() }
             return
         }
 
@@ -58,19 +81,33 @@ class ExpoIVSStagePreviewView(context: Context, appContext: AppContext) : ExpoVi
 
         // If preview exists for the same device, do nothing.
         if (ivsImagePreviewView != null && this.currentPreviewDeviceUrn == newDeviceUrn) {
+            Log.d("ExpoIVSStagePreviewView", "Already showing preview for device: $newDeviceUrn")
             return
         }
 
-        // If preview exists for a different device, or if no preview exists, create it.
+        // Cleanup existing preview
         if (ivsImagePreviewView != null) {
+            Log.d("ExpoIVSStagePreviewView", "Cleaning up existing preview")
             removeView(ivsImagePreviewView)
             ivsImagePreviewView = null
             this.currentPreviewDeviceUrn = null
         }
 
-        // The Android equivalent of Swift's `imageDevice.previewView()`
         try {
-            val newPreview = (cameraDevice as ImageDevice).previewView
+            Log.i("ExpoIVSStagePreviewView", "Attempting to create preview for camera: ${cameraDevice.descriptor.friendlyName}")
+            
+            val imageDevice = cameraDevice as? ImageDevice
+            if (imageDevice == null) {
+                Log.e("ExpoIVSStagePreviewView", "Camera device is not an ImageDevice")
+                return
+            }
+            
+            val newPreview = imageDevice.previewView
+            if (newPreview == null) {
+                Log.e("ExpoIVSStagePreviewView", "Failed to get preview view from camera")
+                return
+            }
+            
             newPreview.layoutParams = FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT
@@ -80,13 +117,34 @@ class ExpoIVSStagePreviewView(context: Context, appContext: AppContext) : ExpoVi
             this.ivsImagePreviewView = newPreview
             this.currentPreviewDeviceUrn = newDeviceUrn
             
-            // Apply props now that the view exists
             applyProps()
+            Log.i("ExpoIVSStagePreviewView", "✅ Successfully attached camera preview for: ${cameraDevice.descriptor.friendlyName}")
         } catch (e: Exception) {
-            // This can happen if the device is not an ImageDevice or another SDK error occurs
+            Log.e("ExpoIVSStagePreviewView", "❌ Failed to attach camera preview: ${e.message}", e)
             this.ivsImagePreviewView = null
             this.currentPreviewDeviceUrn = null
         }
+    }
+    
+    // Public method for manager to notify when camera changes (e.g., after swapCamera)
+    fun refreshPreview() {
+        Log.d("ExpoIVSStagePreviewView", "Refresh preview requested - clearing current preview and reattaching")
+        
+        // Ensure we're on the main thread
+        if (Looper.myLooper() != Looper.getMainLooper()) {
+            mainHandler.post { refreshPreview() }
+            return
+        }
+        
+        // Clear the current preview first
+        if (ivsImagePreviewView != null) {
+            removeView(ivsImagePreviewView)
+            ivsImagePreviewView = null
+        }
+        currentPreviewDeviceUrn = null
+        
+        retryCount = 0
+        attachStreamWithRetry()
     }
     
     private fun applyProps() {
@@ -109,11 +167,29 @@ class ExpoIVSStagePreviewView(context: Context, appContext: AppContext) : ExpoVi
         }
         
         try {
-            // The method `setPreviewAspectMode` is not public, so we use reflection.
             val method = ivsImagePreviewView?.javaClass?.getMethod("setPreviewAspectMode", AspectMode::class.java)
             method?.invoke(ivsImagePreviewView, aspectMode)
         } catch (e: Exception) {
-            // If reflection fails, the view will use its default scaling.
+            Log.w("ExpoIVSStagePreviewView", "Could not set aspect mode: ${e.message}")
         }
     }
-} 
+
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        Log.d("ExpoIVSStagePreviewView", "View attached to window")
+        // Re-attempt to attach if we don't have a preview yet
+        if (ivsImagePreviewView == null) {
+            retryCount = 0
+            resolveStageManagerAndStreamWithRetry()
+        }
+    }
+
+    override fun onDetachedFromWindow() {
+        super.onDetachedFromWindow()
+        Log.d("ExpoIVSStagePreviewView", "View detached from window")
+        // Remove any pending retries
+        mainHandler.removeCallbacksAndMessages(null)
+        // Unregister from manager
+        stageManager?.unregisterPreviewView(this)
+    }
+}

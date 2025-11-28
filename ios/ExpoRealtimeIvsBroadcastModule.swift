@@ -85,7 +85,7 @@ public class ExpoRealtimeIvsBroadcastModule: Module, IVSStageManagerDelegate {
       }
 
       Prop("scaleMode") { (view: ExpoIVSStagePreviewView, scaleMode: String) in // "fit" or "fill"
-        print("DEBUG: Setting stage preview scaleMode to \(scaleMode)")
+        print("DEBUG: Setting stage preview sc›aleMode to \(scaleMode)")
         view.scaleMode = scaleMode
       }
     }
