@@ -6,6 +6,213 @@ extension Notification.Name {
     static let remoteStreamAvailable = Notification.Name("remoteStreamAvailableNotification")
 }
 
+// MARK: - Custom Camera Capture Manager
+// This class captures video from AVCaptureDevice and feeds it to IVS custom image source
+// Used to work around the IVS Stages SDK limitation where back camera isn't exposed
+
+class CustomCameraCapture: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
+    private var captureSession: AVCaptureSession?
+    private var currentInput: AVCaptureDeviceInput?
+    private var videoOutput: AVCaptureVideoDataOutput?
+    private let captureQueue = DispatchQueue(label: "com.ivs.camera.capture")
+    
+    var customImageSource: IVSCustomImageSource?
+    var currentPosition: AVCaptureDevice.Position = .front
+    var previewLayer: AVCaptureVideoPreviewLayer?
+    
+    // Available cameras discovered via AVFoundation
+    private(set) var availableCameras: [AVCaptureDevice] = []
+    
+    override init() {
+        super.init()
+        discoverCameras()
+    }
+    
+    private func discoverCameras() {
+        // Try to discover wide-angle cameras first (most common and best for streaming)
+        var discoverySession = AVCaptureDevice.DiscoverySession(
+            deviceTypes: [.builtInWideAngleCamera],
+            mediaType: .video,
+            position: .unspecified
+        )
+        
+        availableCameras = discoverySession.devices
+        
+        // Fallback 1: If no wide-angle cameras, try dual/triple camera systems
+        if availableCameras.isEmpty {
+            print("📸 [CustomCameraCapture] No wide-angle cameras found, trying dual/triple cameras...")
+            discoverySession = AVCaptureDevice.DiscoverySession(
+                deviceTypes: [.builtInDualCamera, .builtInTripleCamera, .builtInDualWideCamera],
+                mediaType: .video,
+                position: .unspecified
+            )
+            availableCameras = discoverySession.devices
+        }
+        
+        // Fallback 2: If still empty, try telephoto and ultra-wide
+        if availableCameras.isEmpty {
+            print("📸 [CustomCameraCapture] No dual/triple cameras found, trying telephoto/ultra-wide...")
+            discoverySession = AVCaptureDevice.DiscoverySession(
+                deviceTypes: [.builtInTelephotoCamera, .builtInUltraWideCamera],
+                mediaType: .video,
+                position: .unspecified
+            )
+            availableCameras = discoverySession.devices
+        }
+        
+        // Fallback 3: Last resort - try ANY video device
+        if availableCameras.isEmpty {
+            print("📸 [CustomCameraCapture] No built-in cameras found, trying any video device...")
+            if let defaultCamera = AVCaptureDevice.default(for: .video) {
+                availableCameras = [defaultCamera]
+            }
+        }
+        
+        print("📸 [CustomCameraCapture] Discovered \(availableCameras.count) cameras via AVFoundation")
+        for camera in availableCameras {
+            let posStr = camera.position == .front ? "FRONT" : (camera.position == .back ? "BACK" : "OTHER")
+            print("📸 [CustomCameraCapture]   - \(posStr): \(camera.localizedName) (type: \(camera.deviceType.rawValue))")
+        }
+        
+        if availableCameras.isEmpty {
+            print("📸 [CustomCameraCapture] ⚠️ WARNING: No cameras found on this device!")
+        }
+    }
+    
+    func setupCaptureSession(for position: AVCaptureDevice.Position) -> Bool {
+        print("📸 [CustomCameraCapture] Setting up capture session for position: \(position == .front ? "FRONT" : "BACK")")
+        
+        // Find the camera for the requested position
+        guard let camera = availableCameras.first(where: { $0.position == position }) else {
+            print("📸 [CustomCameraCapture] ❌ No camera found for position")
+            return false
+        }
+        
+        // Create or reuse capture session
+        if captureSession == nil {
+            captureSession = AVCaptureSession()
+            captureSession?.sessionPreset = .hd1280x720
+        }
+        
+        guard let session = captureSession else { return false }
+        
+        session.beginConfiguration()
+        
+        // Remove existing input if any
+        if let existingInput = currentInput {
+            session.removeInput(existingInput)
+        }
+        
+        // Add new input
+        do {
+            let input = try AVCaptureDeviceInput(device: camera)
+            if session.canAddInput(input) {
+                session.addInput(input)
+                currentInput = input
+                currentPosition = position
+                print("📸 [CustomCameraCapture] ✅ Added camera input: \(camera.localizedName)")
+            } else {
+                print("📸 [CustomCameraCapture] ❌ Cannot add camera input")
+                session.commitConfiguration()
+                return false
+            }
+        } catch {
+            print("📸 [CustomCameraCapture] ❌ Error creating camera input: \(error)")
+            session.commitConfiguration()
+            return false
+        }
+        
+        // Setup video output if not already done
+        if videoOutput == nil {
+            let output = AVCaptureVideoDataOutput()
+            output.videoSettings = [
+                kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA
+            ]
+            output.setSampleBufferDelegate(self, queue: captureQueue)
+            output.alwaysDiscardsLateVideoFrames = true
+            
+            if session.canAddOutput(output) {
+                session.addOutput(output)
+                videoOutput = output
+                print("📸 [CustomCameraCapture] ✅ Added video output")
+            }
+        }
+        
+        // Configure video orientation
+        if let connection = videoOutput?.connection(with: .video) {
+            if connection.isVideoOrientationSupported {
+                connection.videoOrientation = .portrait
+            }
+            // Mirror front camera
+            if connection.isVideoMirroringSupported {
+                connection.isVideoMirrored = (position == .front)
+            }
+            print("📸 [CustomCameraCapture] ✅ Configured video connection orientation")
+        }
+        
+        session.commitConfiguration()
+        
+        // Create preview layer ONLY if it doesn't exist yet
+        // The same preview layer will work when we swap cameras since it's connected to the session
+        if previewLayer == nil {
+            previewLayer = AVCaptureVideoPreviewLayer(session: session)
+            previewLayer?.videoGravity = .resizeAspectFill
+            print("📸 [CustomCameraCapture] ✅ Created preview layer")
+        }
+        
+        return true
+    }
+    
+    func startCapture() {
+        captureQueue.async { [weak self] in
+            if self?.captureSession?.isRunning == false {
+                self?.captureSession?.startRunning()
+                print("📸 [CustomCameraCapture] ✅ Capture session started")
+            }
+        }
+    }
+    
+    func stopCapture() {
+        captureQueue.async { [weak self] in
+            if self?.captureSession?.isRunning == true {
+                self?.captureSession?.stopRunning()
+                print("📸 [CustomCameraCapture] Capture session stopped")
+            }
+        }
+    }
+    
+    func swapCamera() -> Bool {
+        let newPosition: AVCaptureDevice.Position = (currentPosition == .front) ? .back : .front
+        print("📸 [CustomCameraCapture] Swapping camera from \(currentPosition == .front ? "FRONT" : "BACK") to \(newPosition == .front ? "FRONT" : "BACK")")
+        
+        // Setup capture session for new position (this will swap the input while keeping session)
+        let success = setupCaptureSession(for: newPosition)
+        
+        if success {
+            // Ensure capture is running
+            if captureSession?.isRunning == false {
+                captureQueue.async { [weak self] in
+                    self?.captureSession?.startRunning()
+                    print("📸 [CustomCameraCapture] ✅ Capture session restarted after swap")
+                }
+            }
+        }
+        
+        return success
+    }
+    
+    // MARK: - AVCaptureVideoDataOutputSampleBufferDelegate
+    
+    func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
+        // Feed the sample buffer to IVS custom image source
+        customImageSource?.onSampleBuffer(sampleBuffer)
+    }
+    
+    func captureOutput(_ output: AVCaptureOutput, didDrop sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
+        // Frame dropped - this is normal under heavy load
+    }
+}
+
 // A class to hold the combined state for a single participant
 class StageParticipant {
     let info: IVSParticipantInfo
@@ -34,6 +241,11 @@ class IVSStageManager: NSObject, IVSStageStreamDelegate, IVSStageStrategy, IVSSt
     // To keep track of the selected camera device (front/back)
     private var currentCameraDevice: IVSDevice? // Initially nil, can be set to default
     private var availableCameras: [IVSCamera] = []
+    
+    // Custom camera capture for back camera support (workaround for IVS Stages SDK limitation)
+    private var customCameraCapture: CustomCameraCapture?
+    private var customImageSource: IVSCustomImageSource?
+    private var useCustomCameraCapture: Bool = false
 
     // Delegate for sending events back to the Module
     weak var delegate: IVSStageManagerDelegate?
@@ -57,25 +269,126 @@ class IVSStageManager: NSObject, IVSStageStreamDelegate, IVSStageStrategy, IVSSt
     }
 
     private func discoverDevices() {
-        // Discover cameras
-        let discovery = IVSDeviceDiscovery() // Create an instance
-        let localDevices = discovery.listLocalDevices() // This returns [any IVSDevice]
-
-        self.availableCameras = localDevices.compactMap { device -> IVSCamera? in
-            // Access the descriptor of the IVSDevice, then check its type
-            if device.descriptor().type == IVSDeviceType.camera {
-                // The device itself (which conforms to IVSDevice) needs to be cast to IVSCamera
-                // The static IVSDeviceDiscovery.device(forURN:) is more for getting a device if you only have a URN.
-                // Here, we already have the IVSDevice object.
-                return device as? IVSCamera
+        // Try multiple methods to discover cameras
+        // Method 1: IVSBroadcastSession.listAvailableDevices() - recommended by AWS docs
+        // Method 2: IVSDeviceDiscovery().listLocalDevices() - fallback
+        
+        print("📸 [iOS Camera Discovery] Starting device discovery...")
+        
+        // Log what AVFoundation sees (for debugging)
+        let avSession = AVCaptureDevice.DiscoverySession(
+            deviceTypes: [.builtInWideAngleCamera],
+            mediaType: .video,
+            position: .unspecified
+        )
+        print("📸 [iOS Camera Discovery] AVFoundation sees \(avSession.devices.count) cameras:")
+        for (index, avDevice) in avSession.devices.enumerated() {
+            let posStr = avDevice.position == .front ? "FRONT" : (avDevice.position == .back ? "BACK" : "UNSPECIFIED")
+            print("📸 [iOS Camera Discovery]   AVF \(index + 1): position=\(posStr), name=\(avDevice.localizedName)")
+        }
+        
+        // Method 1: Try IVSBroadcastSession.listAvailableDevices() (AWS docs recommended)
+        let broadcastDevices = IVSBroadcastSession.listAvailableDevices()
+        print("📸 [iOS Camera Discovery] IVSBroadcastSession.listAvailableDevices() found \(broadcastDevices.count) devices:")
+        for (index, descriptor) in broadcastDevices.enumerated() {
+            let typeStr: String
+            switch descriptor.type {
+            case .camera: typeStr = "CAMERA"
+            case .microphone: typeStr = "MICROPHONE"
+            case .userAudio: typeStr = "USER_AUDIO"
+            case .userImage: typeStr = "USER_IMAGE"
+            @unknown default: typeStr = "UNKNOWN"
             }
-            return nil
+            let posStr: String
+            switch descriptor.position {
+            case .front: posStr = "FRONT"
+            case .back: posStr = "BACK"
+            @unknown default: posStr = "OTHER"
+            }
+            print("📸 [iOS Camera Discovery]   Broadcast \(index + 1): type=\(typeStr), position=\(posStr), name=\(descriptor.friendlyName)")
+        }
+        
+        // Method 2: Also try IVSDeviceDiscovery for comparison
+        let discovery = IVSDeviceDiscovery()
+        let localDevices = discovery.listLocalDevices()
+        print("📸 [iOS Camera Discovery] IVSDeviceDiscovery.listLocalDevices() found \(localDevices.count) devices:")
+        for (index, device) in localDevices.enumerated() {
+            let descriptor = device.descriptor()
+            let typeStr: String
+            switch descriptor.type {
+            case .camera: typeStr = "CAMERA"
+            case .microphone: typeStr = "MICROPHONE"
+            case .userAudio: typeStr = "USER_AUDIO"
+            case .userImage: typeStr = "USER_IMAGE"
+            @unknown default: typeStr = "UNKNOWN"
+            }
+            let posStr: String
+            switch descriptor.position {
+            case .front: posStr = "FRONT"
+            case .back: posStr = "BACK"
+            @unknown default: posStr = "OTHER"
+            }
+            print("📸 [iOS Camera Discovery]   Discovery \(index + 1): type=\(typeStr), position=\(posStr), name=\(descriptor.friendlyName)")
+        }
+        
+        // Use IVSBroadcastSession descriptors to find cameras
+        var discoveredCameras: [IVSCamera] = []
+        
+        // Get camera descriptors from BroadcastSession (which has both front & back)
+        let cameraDescriptors = broadcastDevices.filter { $0.type == .camera }
+        print("📸 [iOS Camera Discovery] Found \(cameraDescriptors.count) camera descriptors from BroadcastSession")
+        
+        for descriptor in cameraDescriptors {
+            let posStr = descriptor.position == .front ? "FRONT" : (descriptor.position == .back ? "BACK" : "OTHER")
+            
+            // Method 1: Try matching from listLocalDevices by URN
+            if let camera = localDevices.first(where: { $0.descriptor().urn == descriptor.urn }) as? IVSCamera {
+                discoveredCameras.append(camera)
+                print("📸 [iOS Camera Discovery]   ✅ Got IVSCamera via listLocalDevices: position=\(posStr), name=\(descriptor.friendlyName)")
+                continue
+            }
+            
+            // Method 2: Try getting AVCaptureDevice - if IVS SDK doesn't provide back camera,
+            // we'll need to note this as a limitation
+            let urnParts = descriptor.urn.split(separator: ":")
+            if urnParts.count >= 2 {
+                let uniqueID = String(urnParts.dropFirst().joined(separator: ":"))
+                if let avDevice = AVCaptureDevice(uniqueID: uniqueID) {
+                    print("📸 [iOS Camera Discovery]   📱 AVCaptureDevice exists: \(avDevice.localizedName) - but IVS SDK doesn't expose it")
+                }
+            }
+            
+            print("📸 [iOS Camera Discovery]   ❌ IVS Stages SDK limitation: Cannot get IVSCamera for: position=\(posStr), name=\(descriptor.friendlyName)")
+        }
+        
+        // Fallback: If we couldn't match any, use what IVSDeviceDiscovery found directly
+        if discoveredCameras.isEmpty {
+            print("📸 [iOS Camera Discovery] ⚠️ Falling back to IVSDeviceDiscovery cameras only")
+            discoveredCameras = localDevices.compactMap { device -> IVSCamera? in
+                if device.descriptor().type == IVSDeviceType.camera {
+                    return device as? IVSCamera
+                }
+                return nil
+            }
+        }
+        
+        self.availableCameras = discoveredCameras
+        
+        print("📸 [iOS Camera Discovery] Total CAMERAS available for use: \(self.availableCameras.count)")
+        for (index, camera) in self.availableCameras.enumerated() {
+            let descriptor = camera.descriptor()
+            let posStr = descriptor.position == .front ? "FRONT" : (descriptor.position == .back ? "BACK" : "OTHER")
+            print("📸 [iOS Camera Discovery]   Camera \(index + 1): position=\(posStr), name=\(descriptor.friendlyName), urn=\(descriptor.urn)")
         }
 
+        // Select default camera (prefer front camera)
         if let defaultCamera = self.availableCameras.first(where: { $0.descriptor().position == .front }) ?? self.availableCameras.first {
             self.currentCameraDevice = defaultCamera
+            let posStr = defaultCamera.descriptor().position == .front ? "FRONT" : (defaultCamera.descriptor().position == .back ? "BACK" : "OTHER")
+            print("📸 [iOS Camera Discovery] ✅ Selected default camera: position=\(posStr), name=\(defaultCamera.descriptor().friendlyName)")
+        } else {
+            print("📸 [iOS Camera Discovery] ⚠️ No camera available to select as default!")
         }
-        // Microphone discovery is now primarily handled in initializeStage
     }
 
     private func setupAudioSession() {
@@ -95,7 +408,47 @@ class IVSStageManager: NSObject, IVSStageStreamDelegate, IVSStageStrategy, IVSSt
 
         discoverDevices()
 
-        // Create camera stream
+        // Check if we need to use custom camera capture (IVS SDK limitation workaround)
+        // We use custom capture if IVS SDK only provides front camera but AVFoundation has back camera
+        let avSession = AVCaptureDevice.DiscoverySession(
+            deviceTypes: [.builtInWideAngleCamera],
+            mediaType: .video,
+            position: .unspecified
+        )
+        let hasBackCameraInAVFoundation = avSession.devices.contains { $0.position == .back }
+        let hasBackCameraInIVS = self.availableCameras.contains { $0.descriptor().position == .back }
+        
+        self.useCustomCameraCapture = hasBackCameraInAVFoundation && !hasBackCameraInIVS
+        
+        if self.useCustomCameraCapture {
+            print("📸 [IVSStageManager] Using CUSTOM camera capture (IVS SDK limitation workaround)")
+            setupCustomCameraCapture(videoConfig: videoConfig)
+        } else {
+            print("📸 [IVSStageManager] Using NATIVE IVS camera")
+            setupNativeCameraStream(videoConfig: videoConfig)
+        }
+
+        // Create microphone stream (same for both modes)
+        let discovery = IVSDeviceDiscovery()
+        let localDevicesForMic = discovery.listLocalDevices()
+        let micDevice = localDevicesForMic.first { $0.descriptor().type == IVSDeviceType.microphone }
+
+        if let microphoneDevice = micDevice as? IVSMicrophone {
+            let finalAudioConfig: IVSLocalStageStreamAudioConfiguration = audioConfig ?? IVSLocalStageStreamAudioConfiguration()
+
+            let streamConfig = IVSLocalStageStreamConfiguration()
+            streamConfig.audio = finalAudioConfig
+
+            self.microphoneStream = IVSLocalStageStream(device: microphoneDevice, config: streamConfig)
+            self.microphoneStream?.delegate = self
+            print("Microphone stream created using discovered device.")
+        } else {
+            print("No suitable microphone device found through descriptor method.")
+        }
+    }
+    
+    private func setupNativeCameraStream(videoConfig: IVSLocalStageStreamVideoConfiguration?) {
+        // Use native IVS camera (original approach)
         if let camera = currentCameraDevice as? IVSCamera {
             let finalVideoConfig: IVSLocalStageStreamVideoConfiguration = videoConfig ?? {
                 let config = IVSLocalStageStreamVideoConfiguration()
@@ -112,27 +465,66 @@ class IVSStageManager: NSObject, IVSStageStreamDelegate, IVSStageStrategy, IVSSt
 
             self.cameraStream = IVSLocalStageStream(device: camera, config: streamConfig)
             self.cameraStream?.delegate = self
-            print("Camera stream created.")
+            print("📸 [IVSStageManager] Native camera stream created.")
         } else {
-            print("No camera device available or selected to create stream.")
+            print("📸 [IVSStageManager] No native camera device available.")
         }
-
-        // Create microphone stream
-        let discovery = IVSDeviceDiscovery()
-        let localDevicesForMic = discovery.listLocalDevices()
-        let micDevice = localDevicesForMic.first { $0.descriptor().type == IVSDeviceType.microphone }
-
-        if let microphoneDevice = micDevice as? IVSMicrophone {
-            let finalAudioConfig: IVSLocalStageStreamAudioConfiguration = audioConfig ?? IVSLocalStageStreamAudioConfiguration()
-
+    }
+    
+    private func setupCustomCameraCapture(videoConfig: IVSLocalStageStreamVideoConfiguration?) {
+        // Use custom AVCaptureSession -> IVSCustomImageSource approach
+        print("📸 [IVSStageManager] Setting up custom camera capture...")
+        
+        // Initialize custom capture manager
+        customCameraCapture = CustomCameraCapture()
+        
+        // Setup capture session for front camera initially
+        guard customCameraCapture?.setupCaptureSession(for: .front) == true else {
+            print("📸 [IVSStageManager] ❌ Failed to setup custom capture session")
+            return
+        }
+        
+        // Create a temporary broadcast session just to create the custom image source
+        // The custom image source will be used with the stage
+        let broadcastConfig = IVSBroadcastConfiguration()
+        do {
+            try broadcastConfig.video.setSize(CGSize(width: 720, height: 1280))
+            try broadcastConfig.video.setTargetFramerate(30)
+        } catch {
+            print("📸 [IVSStageManager] Error configuring broadcast: \(error)")
+        }
+        
+        // Create broadcast session to get custom image source
+        do {
+            let tempSession = try IVSBroadcastSession(configuration: broadcastConfig, descriptors: nil, delegate: nil)
+            let imageSource = tempSession.createImageSource(withName: "customCamera")
+            
+            self.customImageSource = imageSource
+            self.customCameraCapture?.customImageSource = imageSource
+            
+            // Create local stage stream with the custom image source
+            let finalVideoConfig: IVSLocalStageStreamVideoConfiguration = videoConfig ?? {
+                let config = IVSLocalStageStreamVideoConfiguration()
+                do {
+                    try config.setSize(CGSize(width: 720, height: 1280))
+                } catch {
+                    print("Error setting video config: \(error)")
+                }
+                return config
+            }()
+            
             let streamConfig = IVSLocalStageStreamConfiguration()
-            streamConfig.audio = finalAudioConfig
-
-            self.microphoneStream = IVSLocalStageStream(device: microphoneDevice, config: streamConfig)
-            self.microphoneStream?.delegate = self
-            print("Microphone stream created using discovered device.")
-        } else {
-            print("No suitable microphone device found through descriptor method.")
+            streamConfig.video = finalVideoConfig
+            
+            self.cameraStream = IVSLocalStageStream(device: imageSource, config: streamConfig)
+            self.cameraStream?.delegate = self
+            
+            // Start capturing
+            customCameraCapture?.startCapture()
+            
+            print("📸 [IVSStageManager] ✅ Custom camera capture setup complete!")
+        } catch {
+            print("📸 [IVSStageManager] ❌ Error creating broadcast session for custom source: \(error)")
         }
     }
 
@@ -210,34 +602,84 @@ class IVSStageManager: NSObject, IVSStageStreamDelegate, IVSStageStrategy, IVSSt
     }
 
     func swapCamera() {
+        print("📸 [iOS Camera Swap] swapCamera() called")
+        print("📸 [iOS Camera Swap] Using custom camera capture: \(self.useCustomCameraCapture)")
+        
+        // If using custom camera capture, use that for swap
+        if self.useCustomCameraCapture {
+            swapCameraCustom()
+            return
+        }
+        
+        // Otherwise use native IVS camera swap
+        swapCameraNative()
+    }
+    
+    private func swapCameraCustom() {
+        print("📸 [iOS Camera Swap] Using CUSTOM camera swap")
+        
+        guard let capture = self.customCameraCapture else {
+            print("📸 [iOS Camera Swap] ❌ Custom camera capture not initialized")
+            delegate?.stageManagerDidEmitEvent(eventName: "onCameraSwapError", body: ["reason": "Custom camera capture not initialized."])
+            return
+        }
+        
+        let currentPos = capture.currentPosition == .front ? "FRONT" : "BACK"
+        print("📸 [iOS Camera Swap] Current position: \(currentPos)")
+        
+        if capture.swapCamera() {
+            let newPos = capture.currentPosition == .front ? "FRONT" : "BACK"
+            print("📸 [iOS Camera Swap] ✅ Custom camera swapped to: \(newPos)")
+            delegate?.stageManagerDidEmitEvent(eventName: "onCameraSwapped", body: ["newCameraPosition": newPos])
+        } else {
+            print("📸 [iOS Camera Swap] ❌ Failed to swap custom camera")
+            delegate?.stageManagerDidEmitEvent(eventName: "onCameraSwapError", body: ["reason": "Failed to swap camera."])
+        }
+    }
+    
+    private func swapCameraNative() {
+        print("📸 [iOS Camera Swap] Using NATIVE camera swap")
+        print("📸 [iOS Camera Swap] Available cameras count: \(self.availableCameras.count)")
+        
+        // Log all available cameras for debugging
+        for (index, camera) in self.availableCameras.enumerated() {
+            let positionString = camera.descriptor().position == .front ? "FRONT" : (camera.descriptor().position == .back ? "BACK" : "UNSPECIFIED")
+            print("📸 [iOS Camera Swap]   Available camera \(index + 1): position=\(positionString), name=\(camera.descriptor().friendlyName)")
+        }
+        
         guard self.cameraStream != nil else {
-            print("IVSStageManager: Camera stream not initialized. Cannot swap camera.")
-            // Optionally, send an event to JS
+            print("📸 [iOS Camera Swap] ❌ Camera stream not initialized. Cannot swap camera.")
             delegate?.stageManagerDidEmitEvent(eventName: "onCameraSwapError", body: ["reason": "Camera stream not initialized."])
             return
         }
 
         guard let currentCamDevice = self.currentCameraDevice as? IVSCamera else {
-            print("IVSStageManager: Current camera device is not set or not an IVSCamera.")
+            print("📸 [iOS Camera Swap] ❌ Current camera device is not set or not an IVSCamera.")
             delegate?.stageManagerDidEmitEvent(eventName: "onCameraSwapError", body: ["reason": "Current camera device not set."])
             return
         }
+        
+        let currentPositionString = currentCamDevice.descriptor().position == .front ? "FRONT" : (currentCamDevice.descriptor().position == .back ? "BACK" : "UNSPECIFIED")
+        print("📸 [iOS Camera Swap] Current camera: position=\(currentPositionString), name=\(currentCamDevice.descriptor().friendlyName)")
 
         // Determine the new camera to switch to (e.g., front to back or vice-versa)
         let targetPosition: IVSDevicePosition = (currentCamDevice.descriptor().position == .front) ? .back : .front
+        let targetPositionString = targetPosition == .front ? "FRONT" : (targetPosition == .back ? "BACK" : "UNSPECIFIED")
+        print("📸 [iOS Camera Swap] Target position: \(targetPositionString)")
+        
         guard let newCamera = self.availableCameras.first(where: { $0.descriptor().position == targetPosition }) ?? self.availableCameras.first(where: { $0.descriptor().urn != currentCamDevice.descriptor().urn }) else {
-            print("IVSStageManager: No other camera available to swap to, or only one camera exists.")
+            print("📸 [iOS Camera Swap] ❌ No other camera available to swap to, or only one camera exists.")
             delegate?.stageManagerDidEmitEvent(eventName: "onCameraSwapError", body: ["reason": "No other camera available."])
             return
         }
 
         if newCamera.descriptor().urn == currentCamDevice.descriptor().urn {
-            print("IVSStageManager: Selected new camera is the same as the current one. No swap needed.")
-            // Optionally inform JS if needed
+            print("📸 [iOS Camera Swap] ⚠️ Selected new camera is the same as the current one. No swap needed.")
             return
         }
         
-        print("IVSStageManager: Attempting to swap from camera \(currentCamDevice.descriptor().friendlyName) to \(newCamera.descriptor().friendlyName)")
+        let newPositionString = newCamera.descriptor().position == .front ? "FRONT" : (newCamera.descriptor().position == .back ? "BACK" : "UNSPECIFIED")
+        print("📸 [iOS Camera Swap] Attempting to swap from \(currentPositionString) (\(currentCamDevice.descriptor().friendlyName)) to \(newPositionString) (\(newCamera.descriptor().friendlyName))")
 
         // 1. Create a default video configuration (consistent with initializeStage)
         let defaultVideoConfig: IVSLocalStageStreamVideoConfiguration = {
@@ -335,6 +777,23 @@ class IVSStageManager: NSObject, IVSStageStreamDelegate, IVSStageStrategy, IVSSt
     // Public getter for the camera stream so the View can access it
     public func getCameraStream() -> IVSLocalStageStream? {
         return self.cameraStream
+    }
+    
+    public func isUsingCustomCameraCapture() -> Bool {
+        return self.useCustomCameraCapture
+    }
+    
+    public func getCustomCameraPreviewLayer() -> AVCaptureVideoPreviewLayer? {
+        return self.customCameraCapture?.previewLayer
+    }
+    
+    public func getCurrentCameraPosition() -> String {
+        if self.useCustomCameraCapture {
+            return self.customCameraCapture?.currentPosition == .front ? "front" : "back"
+        } else if let camera = self.currentCameraDevice as? IVSCamera {
+            return camera.descriptor().position == .front ? "front" : "back"
+        }
+        return "unknown"
     }
     
     public func findStream(forParticipantId participantId: String, deviceUrn: String) -> IVSStageStream? {
