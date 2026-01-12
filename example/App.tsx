@@ -231,6 +231,14 @@ export default function App() {
                     <Button title={mirrorView ? "Unmirror" : "Mirror"} onPress={toggleMirror} />
                     <Button title={`Scale: ${scaleMode}`} onPress={toggleScaleMode} />
                 </View>
+                <View style={styles.controlsRow}>
+                    <TouchableOpacity style={styles.flipButton} onPress={handleSwapCamera}>
+                      <Text style={styles.flipButtonText}>🔄 FLIP CAMERA</Text>
+                    </TouchableOpacity>
+                </View>
+                {lastSwapResult && (
+                  <Text style={styles.swapStatus}>Last swap: {lastSwapResult}</Text>
+                )}
               </>
             ) : (
               <Button title="Start Camera & Mic (Go Live)" onPress={handleInitializeLocalStreams} />
@@ -279,7 +287,7 @@ export default function App() {
           {role === 'publisher' && (
              <View style={styles.controlsRow}>
                <Button title={isPublished ? 'Unpublish' : 'Publish'} onPress={handleTogglePublish} disabled={!localStreamsInitialized || connectionState?.state !== 'connected'} />
-               <Button title="Swap Cam" onPress={handleSwapCamera} disabled={!localStreamsInitialized} />
+               <Button title="Swap Cam" onPress={handleSwapCamera} />
                <Button title={isMuted ? 'Unmute' : 'Mute'} onPress={handleToggleMute} disabled={!localStreamsInitialized} />
              </View>
           )}
@@ -394,5 +402,28 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-around',
     marginBottom: 10,
+  },
+  flipButton: {
+    backgroundColor: '#007AFF',
+    paddingHorizontal: 30,
+    paddingVertical: 15,
+    borderRadius: 10,
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+  },
+  flipButtonText: {
+    color: 'white',
+    fontSize: 18,
+    fontWeight: 'bold',
+    textAlign: 'center',
+  },
+  swapStatus: {
+    textAlign: 'center',
+    marginTop: 5,
+    fontSize: 12,
+    color: '#666',
   },
 });
