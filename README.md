@@ -8,7 +8,7 @@ This module provides React Native components and a comprehensive API to integrat
 
 | Library Version | Expo SDK | React Native | React   |
 |-----------------|----------|--------------|---------|
-| 0.1.5           | 54       | 0.81.x       | 19.1.x  |
+| 0.1.7           | 54       | 0.81.x       | 19.1.x  |
 | 0.1.4           | 53       | 0.79.x       | 19.0.x  |
 
 ## Installation
