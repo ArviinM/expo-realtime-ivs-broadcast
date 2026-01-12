@@ -170,8 +170,11 @@ class IVSStageManager(private val context: Context) : Stage.Strategy, StageRende
         stage?.refreshStrategy()
         Log.i("ExpoIVSStageManager", "✅ Camera swapped to: ${newCamera.descriptor.friendlyName}")
         
-        // Notify all preview views to refresh with the new camera
-        notifyPreviewViewsToRefresh()
+        // Delay the preview refresh to allow the new camera stream to fully initialize
+        // The green screen issue occurs when we try to get previewView before the stream is ready
+        mainHandler.postDelayed({
+            notifyPreviewViewsToRefresh()
+        }, 150) // 150ms delay for stream initialization
     }
     
     private fun notifyPreviewViewsToRefresh() {

@@ -104,8 +104,21 @@ class ExpoIVSStagePreviewView(context: Context, appContext: AppContext) : ExpoVi
             
             val newPreview = imageDevice.previewView
             if (newPreview == null) {
-                Log.e("ExpoIVSStagePreviewView", "Failed to get preview view from camera")
+                // Preview view not ready yet, retry after delay
+                if (retryCount < maxRetries) {
+                    retryCount++
+                    Log.w("ExpoIVSStagePreviewView", "Preview view is null, retrying in ${retryDelayMs}ms (attempt $retryCount)...")
+                    mainHandler.postDelayed({ attachStreamWithRetry() }, retryDelayMs)
+                } else {
+                    Log.e("ExpoIVSStagePreviewView", "Failed to get preview view from camera after $maxRetries attempts")
+                }
                 return
+            }
+            
+            // Check if preview is attached to another parent and detach it first
+            if (newPreview.parent != null) {
+                Log.w("ExpoIVSStagePreviewView", "Preview view already has a parent, detaching first...")
+                (newPreview.parent as? android.view.ViewGroup)?.removeView(newPreview)
             }
             
             newPreview.layoutParams = FrameLayout.LayoutParams(
@@ -123,6 +136,13 @@ class ExpoIVSStagePreviewView(context: Context, appContext: AppContext) : ExpoVi
             Log.e("ExpoIVSStagePreviewView", "❌ Failed to attach camera preview: ${e.message}", e)
             this.ivsImagePreviewView = null
             this.currentPreviewDeviceUrn = null
+            
+            // Retry on exception as well
+            if (retryCount < maxRetries) {
+                retryCount++
+                Log.w("ExpoIVSStagePreviewView", "Retrying after exception in ${retryDelayMs}ms (attempt $retryCount)...")
+                mainHandler.postDelayed({ attachStreamWithRetry() }, retryDelayMs)
+            }
         }
     }
     
@@ -138,13 +158,21 @@ class ExpoIVSStagePreviewView(context: Context, appContext: AppContext) : ExpoVi
         
         // Clear the current preview first
         if (ivsImagePreviewView != null) {
-            removeView(ivsImagePreviewView)
+            try {
+                removeView(ivsImagePreviewView)
+            } catch (e: Exception) {
+                Log.w("ExpoIVSStagePreviewView", "Error removing old preview view: ${e.message}")
+            }
             ivsImagePreviewView = null
         }
         currentPreviewDeviceUrn = null
         
         retryCount = 0
-        attachStreamWithRetry()
+        // Add a small delay to ensure the old preview is fully detached 
+        // before attaching the new one (prevents green screen on camera swap)
+        mainHandler.postDelayed({
+            attachStreamWithRetry()
+        }, 50)
     }
     
     private fun applyProps() {
