@@ -5,7 +5,6 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
-import android.view.View
 import android.view.ViewTreeObserver
 import android.widget.FrameLayout
 import androidx.annotation.RequiresApi
@@ -37,9 +36,8 @@ class ExpoIVSStagePreviewView(context: Context, appContext: AppContext) : ExpoVi
 
     init {
         Log.i("ExpoIVSStagePreviewView", "Initializing Stage Preview View...")
-        // Start initialization immediately - don't wait for onAttachedToWindow
-        // This ensures the preview is ready when the view becomes visible
-        resolveStageManagerAndStreamWithRetry()
+        // Note: We don't start initialization here because isViewAttached is false
+        // The initialization will happen in onAttachedToWindow when the view is ready
     }
     
     // Override onLayout to ensure child views are properly sized
@@ -50,12 +48,18 @@ class ExpoIVSStagePreviewView(context: Context, appContext: AppContext) : ExpoVi
         val childWidth = right - left
         val childHeight = bottom - top
         
-        for (i in 0 until childCount) {
-            val child = getChildAt(i)
-            child.layout(0, 0, childWidth, childHeight)
+        // Use safe iteration - get count once and check for null children
+        val count = childCount
+        for (i in 0 until count) {
+            val child = getChildAt(i) ?: continue // Skip null children
+            try {
+                child.layout(0, 0, childWidth, childHeight)
+            } catch (e: Exception) {
+                Log.w("ExpoIVSStagePreviewView", "Error laying out child $i: ${e.message}")
+            }
         }
         
-        Log.d("ExpoIVSStagePreviewView", "📐 onLayout: ${childWidth}x${childHeight}, children: $childCount")
+        Log.d("ExpoIVSStagePreviewView", "📐 onLayout: ${childWidth}x${childHeight}, children: $count")
     }
     
     // Override onMeasure to properly measure children
@@ -69,26 +73,38 @@ class ExpoIVSStagePreviewView(context: Context, appContext: AppContext) : ExpoVi
         val childWidthSpec = MeasureSpec.makeMeasureSpec(width, MeasureSpec.EXACTLY)
         val childHeightSpec = MeasureSpec.makeMeasureSpec(height, MeasureSpec.EXACTLY)
         
-        for (i in 0 until childCount) {
-            val child = getChildAt(i)
-            child.measure(childWidthSpec, childHeightSpec)
+        // Use safe iteration - get count once and check for null children
+        val count = childCount
+        for (i in 0 until count) {
+            val child = getChildAt(i) ?: continue // Skip null children
+            try {
+                child.measure(childWidthSpec, childHeightSpec)
+            } catch (e: Exception) {
+                Log.w("ExpoIVSStagePreviewView", "Error measuring child $i: ${e.message}")
+            }
         }
         
         Log.d("ExpoIVSStagePreviewView", "📐 onMeasure: ${width}x${height}")
     }
 
     private fun resolveStageManagerAndStreamWithRetry() {
+        // Guard: Don't proceed if view is not attached
+        if (!isViewAttached) {
+            Log.w("ExpoIVSStagePreviewView", "⚠️ View not attached, skipping resolveStageManagerAndStreamWithRetry")
+            return
+        }
+        
         Log.d("ExpoIVSStagePreviewView", "Attempting to resolve StageManager (attempt ${retryCount + 1})...")
         
         val manager = IVSStageManager.instance
         
         if (manager == null) {
-            if (retryCount < maxRetries) {
+            if (retryCount < maxRetries && isViewAttached) {
                 retryCount++
                 Log.w("ExpoIVSStagePreviewView", "IVSStageManager not ready, retrying in ${retryDelayMs}ms...")
                 mainHandler.postDelayed({ resolveStageManagerAndStreamWithRetry() }, retryDelayMs)
             } else {
-                Log.e("ExpoIVSStagePreviewView", "IVSStageManager singleton is null after $maxRetries attempts.")
+                Log.e("ExpoIVSStagePreviewView", "IVSStageManager singleton is null after $maxRetries attempts or view detached.")
             }
             return
         }
@@ -100,15 +116,21 @@ class ExpoIVSStagePreviewView(context: Context, appContext: AppContext) : ExpoVi
     }
 
     private fun attachStreamWithRetry() {
+        // Guard: Don't attach if view is not attached to window
+        if (!isViewAttached) {
+            Log.w("ExpoIVSStagePreviewView", "⚠️ View not attached to window, skipping attachStreamWithRetry")
+            return
+        }
+        
         val cameraDevice = this.stageManager?.getLocalCameraDevice()
 
         if (cameraDevice == null) {
-            if (retryCount < maxRetries) {
+            if (retryCount < maxRetries && isViewAttached) {
                 retryCount++
                 Log.w("ExpoIVSStagePreviewView", "Camera device not ready, retrying in ${retryDelayMs}ms...")
                 mainHandler.postDelayed({ attachStreamWithRetry() }, retryDelayMs)
             } else {
-                Log.e("ExpoIVSStagePreviewView", "Camera device not available after $maxRetries attempts.")
+                Log.e("ExpoIVSStagePreviewView", "Camera device not available after $maxRetries attempts or view detached.")
             }
             return
         }
@@ -128,16 +150,19 @@ class ExpoIVSStagePreviewView(context: Context, appContext: AppContext) : ExpoVi
             return
         }
 
-        // Cleanup existing preview
-        if (ivsImagePreviewView != null) {
+        // Cleanup existing preview - clear references first, then remove view
+        val oldPreview = ivsImagePreviewView
+        if (oldPreview != null) {
             Log.d("ExpoIVSStagePreviewView", "Cleaning up existing preview")
-            try {
-                removeView(ivsImagePreviewView)
-            } catch (e: Exception) {
-                Log.w("ExpoIVSStagePreviewView", "Error removing old preview: ${e.message}")
-            }
             ivsImagePreviewView = null
             currentPreviewDeviceUrn = null
+            if (oldPreview.parent == this) {
+                try {
+                    removeView(oldPreview)
+                } catch (e: Exception) {
+                    Log.w("ExpoIVSStagePreviewView", "Error removing old preview: ${e.message}")
+                }
+            }
         }
 
         try {
@@ -159,17 +184,23 @@ class ExpoIVSStagePreviewView(context: Context, appContext: AppContext) : ExpoVi
             }
             
             if (newPreview == null) {
-                if (retryCount < maxRetries) {
+                if (retryCount < maxRetries && isViewAttached) {
                     retryCount++
                     Log.w("ExpoIVSStagePreviewView", "Preview view is null, retrying in ${retryDelayMs}ms (attempt $retryCount)...")
                     mainHandler.postDelayed({ attachStreamWithRetry() }, retryDelayMs)
                 } else {
-                    Log.e("ExpoIVSStagePreviewView", "Failed to get preview view from camera after $maxRetries attempts")
+                    Log.e("ExpoIVSStagePreviewView", "Failed to get preview view from camera after $maxRetries attempts or view detached")
                 }
                 return
             }
             
             Log.i("ExpoIVSStagePreviewView", "📷 Got preview view: ${newPreview.javaClass.simpleName}, hashCode: ${newPreview.hashCode()}")
+            
+            // Double-check we're still attached before modifying view hierarchy
+            if (!isViewAttached) {
+                Log.w("ExpoIVSStagePreviewView", "⚠️ View detached while getting preview, aborting")
+                return
+            }
             
             // IMPORTANT: Check if preview is attached to another parent and detach it first
             val existingParent = newPreview.parent
@@ -184,6 +215,12 @@ class ExpoIVSStagePreviewView(context: Context, appContext: AppContext) : ExpoVi
                 this.ivsImagePreviewView = newPreview
                 this.currentPreviewDeviceUrn = newDeviceUrn
                 applyProps()
+                return
+            }
+            
+            // Final check before adding view
+            if (!isViewAttached) {
+                Log.w("ExpoIVSStagePreviewView", "⚠️ View detached before addView, aborting")
                 return
             }
             
@@ -210,15 +247,24 @@ class ExpoIVSStagePreviewView(context: Context, appContext: AppContext) : ExpoVi
                 viewTreeObserver.addOnGlobalLayoutListener(object : ViewTreeObserver.OnGlobalLayoutListener {
                     override fun onGlobalLayout() {
                         viewTreeObserver.removeOnGlobalLayoutListener(this)
+                        // Guard: check if still attached and preview exists
+                        if (!isViewAttached) {
+                            Log.w("ExpoIVSStagePreviewView", "📐 Deferred layout skipped - view detached")
+                            return
+                        }
                         val preview = ivsImagePreviewView ?: return
                         if (this@ExpoIVSStagePreviewView.width > 0 && this@ExpoIVSStagePreviewView.height > 0) {
                             val w = this@ExpoIVSStagePreviewView.width
                             val h = this@ExpoIVSStagePreviewView.height
                             val wSpec = MeasureSpec.makeMeasureSpec(w, MeasureSpec.EXACTLY)
                             val hSpec = MeasureSpec.makeMeasureSpec(h, MeasureSpec.EXACTLY)
-                            preview.measure(wSpec, hSpec)
-                            preview.layout(0, 0, w, h)
-                            Log.i("ExpoIVSStagePreviewView", "📐 Deferred layout: preview now ${preview.measuredWidth}x${preview.measuredHeight}")
+                            try {
+                                preview.measure(wSpec, hSpec)
+                                preview.layout(0, 0, w, h)
+                                Log.i("ExpoIVSStagePreviewView", "📐 Deferred layout: preview now ${preview.measuredWidth}x${preview.measuredHeight}")
+                            } catch (e: Exception) {
+                                Log.w("ExpoIVSStagePreviewView", "📐 Deferred layout error: ${e.message}")
+                            }
                         }
                     }
                 })
@@ -256,26 +302,37 @@ class ExpoIVSStagePreviewView(context: Context, appContext: AppContext) : ExpoVi
             return
         }
         
-        // Clear the current preview first
+        // Don't refresh if view is no longer attached
+        if (!isViewAttached) {
+            Log.w("ExpoIVSStagePreviewView", "🔄 Skipping refresh - view not attached")
+            return
+        }
+        
+        // Capture and clear references BEFORE removing view
         val oldPreview = ivsImagePreviewView
-        if (oldPreview != null) {
+        ivsImagePreviewView = null
+        currentPreviewDeviceUrn = null
+        
+        // Now remove the old preview if it exists
+        if (oldPreview != null && oldPreview.parent == this) {
             Log.i("ExpoIVSStagePreviewView", "🔄 Removing old preview view")
             try {
                 removeView(oldPreview)
             } catch (e: Exception) {
                 Log.w("ExpoIVSStagePreviewView", "Error removing old preview view: ${e.message}")
             }
-            ivsImagePreviewView = null
         }
-        
-        // IMPORTANT: Clear the URN so attachStreamWithRetry will fetch a fresh preview
-        currentPreviewDeviceUrn = null
         
         retryCount = 0
         // Add a delay to allow the new camera stream to initialize
         mainHandler.postDelayed({
-            Log.i("ExpoIVSStagePreviewView", "🔄 Now attaching new preview after delay")
-            attachStreamWithRetry()
+            // Double-check we're still attached before trying to attach stream
+            if (isViewAttached) {
+                Log.i("ExpoIVSStagePreviewView", "🔄 Now attaching new preview after delay")
+                attachStreamWithRetry()
+            } else {
+                Log.w("ExpoIVSStagePreviewView", "🔄 Skipping attach - view no longer attached")
+            }
         }, 200)
     }
     
@@ -337,31 +394,31 @@ class ExpoIVSStagePreviewView(context: Context, appContext: AppContext) : ExpoVi
         Log.d("ExpoIVSStagePreviewView", "View detached from window")
         isViewAttached = false
         
-        // Remove pending callbacks
+        // Remove pending callbacks FIRST to prevent any async operations
         mainHandler.removeCallbacksAndMessages(null)
         
-        // Remove the preview view from this parent so it can be reused
-        // Do this in a post to avoid conflicts with the current render cycle
-        val preview = ivsImagePreviewView
-        if (preview != null) {
-            mainHandler.post {
-                try {
-                    if (preview.parent == this) {
-                        removeView(preview)
-                        Log.d("ExpoIVSStagePreviewView", "Preview removed in post")
-                    }
-                } catch (e: Exception) {
-                    Log.w("ExpoIVSStagePreviewView", "Error removing preview in post: ${e.message}")
-                }
-            }
-        }
+        // Unregister from manager BEFORE touching views
+        stageManager?.unregisterPreviewView(this)
         
-        // Clear references
+        // Capture reference before clearing
+        val preview = ivsImagePreviewView
+        
+        // Clear references BEFORE removing view to prevent race conditions
+        // This ensures no other code can access the preview during removal
         ivsImagePreviewView = null
         currentPreviewDeviceUrn = null
         
-        // Unregister from manager
-        stageManager?.unregisterPreviewView(this)
+        // Remove the preview view synchronously if it exists and is our child
+        // We do this AFTER clearing references but BEFORE calling super
+        // to ensure the view hierarchy is consistent
+        if (preview != null && preview.parent == this) {
+            try {
+                removeView(preview)
+                Log.d("ExpoIVSStagePreviewView", "Preview removed synchronously on detach")
+            } catch (e: Exception) {
+                Log.w("ExpoIVSStagePreviewView", "Error removing preview on detach: ${e.message}")
+            }
+        }
         
         super.onDetachedFromWindow()
     }

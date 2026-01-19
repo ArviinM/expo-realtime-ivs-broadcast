@@ -1,102 +1,62 @@
-"use strict";
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    var desc = Object.getOwnPropertyDescriptor(m, k);
-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
-    }
-    Object.defineProperty(o, k2, desc);
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __exportStar = (this && this.__exportStar) || function(m, exports) {
-    for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
-};
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.useStageParticipants = exports.ExpoIVSRemoteStreamView = exports.ExpoIVSStagePreviewView = void 0;
-exports.initializeStage = initializeStage;
-exports.initializeLocalStreams = initializeLocalStreams;
-exports.joinStage = joinStage;
-exports.leaveStage = leaveStage;
-exports.setStreamsPublished = setStreamsPublished;
-exports.swapCamera = swapCamera;
-exports.setMicrophoneMuted = setMicrophoneMuted;
-exports.requestPermissions = requestPermissions;
-exports.addOnStageConnectionStateChangedListener = addOnStageConnectionStateChangedListener;
-exports.addOnPublishStateChangedListener = addOnPublishStateChangedListener;
-exports.addOnStageErrorListener = addOnStageErrorListener;
-exports.addOnCameraSwappedListener = addOnCameraSwappedListener;
-exports.addOnCameraSwapErrorListener = addOnCameraSwapErrorListener;
-exports.addOnParticipantJoinedListener = addOnParticipantJoinedListener;
-exports.addOnParticipantLeftListener = addOnParticipantLeftListener;
-exports.addOnParticipantStreamsAddedListener = addOnParticipantStreamsAddedListener;
-exports.addOnParticipantStreamsRemovedListener = addOnParticipantStreamsRemovedListener;
-const ExpoRealtimeIvsBroadcastModule_1 = __importDefault(require("./ExpoRealtimeIvsBroadcastModule"));
+import ExpoRealtimeIvsBroadcastModule from './ExpoRealtimeIvsBroadcastModule';
 // Re-export all type definitions
-__exportStar(require("./ExpoRealtimeIvsBroadcast.types"), exports);
+export * from './ExpoRealtimeIvsBroadcast.types';
 // Export the native view components
-var ExpoIVSStagePreviewView_1 = require("./ExpoIVSStagePreviewView");
-Object.defineProperty(exports, "ExpoIVSStagePreviewView", { enumerable: true, get: function () { return ExpoIVSStagePreviewView_1.ExpoIVSStagePreviewView; } });
-var ExpoIVSRemoteStreamView_1 = require("./ExpoIVSRemoteStreamView");
-Object.defineProperty(exports, "ExpoIVSRemoteStreamView", { enumerable: true, get: function () { return ExpoIVSRemoteStreamView_1.ExpoIVSRemoteStreamView; } });
+export { ExpoIVSStagePreviewView } from './ExpoIVSStagePreviewView';
+export { ExpoIVSRemoteStreamView } from './ExpoIVSRemoteStreamView';
 // Export the custom hook
-var useStageParticipants_1 = require("./useStageParticipants");
-Object.defineProperty(exports, "useStageParticipants", { enumerable: true, get: function () { return useStageParticipants_1.useStageParticipants; } });
+export { useStageParticipants } from './useStageParticipants';
 // --- Native Module Methods ---
-async function initializeStage(audioConfig, videoConfig) {
-    return await ExpoRealtimeIvsBroadcastModule_1.default.initializeStage(audioConfig, videoConfig);
+export async function initializeStage(audioConfig, videoConfig) {
+    return await ExpoRealtimeIvsBroadcastModule.initializeStage(audioConfig, videoConfig);
 }
-async function initializeLocalStreams(audioConfig, videoConfig) {
-    return await ExpoRealtimeIvsBroadcastModule_1.default.initializeLocalStreams(audioConfig, videoConfig);
+export async function initializeLocalStreams(audioConfig, videoConfig) {
+    return await ExpoRealtimeIvsBroadcastModule.initializeLocalStreams(audioConfig, videoConfig);
 }
-async function joinStage(token, options) {
-    return await ExpoRealtimeIvsBroadcastModule_1.default.joinStage(token, options);
+export async function joinStage(token, options) {
+    return await ExpoRealtimeIvsBroadcastModule.joinStage(token, options);
 }
-async function leaveStage() {
-    return await ExpoRealtimeIvsBroadcastModule_1.default.leaveStage();
+export async function leaveStage() {
+    return await ExpoRealtimeIvsBroadcastModule.leaveStage();
 }
-async function setStreamsPublished(published) {
-    return await ExpoRealtimeIvsBroadcastModule_1.default.setStreamsPublished(published);
+export async function setStreamsPublished(published) {
+    return await ExpoRealtimeIvsBroadcastModule.setStreamsPublished(published);
 }
-async function swapCamera() {
-    return await ExpoRealtimeIvsBroadcastModule_1.default.swapCamera();
+export async function swapCamera() {
+    return await ExpoRealtimeIvsBroadcastModule.swapCamera();
 }
-async function setMicrophoneMuted(muted) {
-    return await ExpoRealtimeIvsBroadcastModule_1.default.setMicrophoneMuted(muted);
+export async function setMicrophoneMuted(muted) {
+    return await ExpoRealtimeIvsBroadcastModule.setMicrophoneMuted(muted);
 }
-async function requestPermissions() {
-    return await ExpoRealtimeIvsBroadcastModule_1.default.requestPermissions();
+export async function requestPermissions() {
+    return await ExpoRealtimeIvsBroadcastModule.requestPermissions();
 }
 // --- Event Emitter ---
-function addOnStageConnectionStateChangedListener(listener) {
-    return ExpoRealtimeIvsBroadcastModule_1.default.addListener('onStageConnectionStateChanged', listener);
+export function addOnStageConnectionStateChangedListener(listener) {
+    return ExpoRealtimeIvsBroadcastModule.addListener('onStageConnectionStateChanged', listener);
 }
-function addOnPublishStateChangedListener(listener) {
-    return ExpoRealtimeIvsBroadcastModule_1.default.addListener('onPublishStateChanged', listener);
+export function addOnPublishStateChangedListener(listener) {
+    return ExpoRealtimeIvsBroadcastModule.addListener('onPublishStateChanged', listener);
 }
-function addOnStageErrorListener(listener) {
-    return ExpoRealtimeIvsBroadcastModule_1.default.addListener('onStageError', listener);
+export function addOnStageErrorListener(listener) {
+    return ExpoRealtimeIvsBroadcastModule.addListener('onStageError', listener);
 }
-function addOnCameraSwappedListener(listener) {
-    return ExpoRealtimeIvsBroadcastModule_1.default.addListener('onCameraSwapped', listener);
+export function addOnCameraSwappedListener(listener) {
+    return ExpoRealtimeIvsBroadcastModule.addListener('onCameraSwapped', listener);
 }
-function addOnCameraSwapErrorListener(listener) {
-    return ExpoRealtimeIvsBroadcastModule_1.default.addListener('onCameraSwapError', listener);
+export function addOnCameraSwapErrorListener(listener) {
+    return ExpoRealtimeIvsBroadcastModule.addListener('onCameraSwapError', listener);
 }
-function addOnParticipantJoinedListener(listener) {
-    return ExpoRealtimeIvsBroadcastModule_1.default.addListener('onParticipantJoined', listener);
+export function addOnParticipantJoinedListener(listener) {
+    return ExpoRealtimeIvsBroadcastModule.addListener('onParticipantJoined', listener);
 }
-function addOnParticipantLeftListener(listener) {
-    return ExpoRealtimeIvsBroadcastModule_1.default.addListener('onParticipantLeft', listener);
+export function addOnParticipantLeftListener(listener) {
+    return ExpoRealtimeIvsBroadcastModule.addListener('onParticipantLeft', listener);
 }
-function addOnParticipantStreamsAddedListener(listener) {
-    return ExpoRealtimeIvsBroadcastModule_1.default.addListener('onParticipantStreamsAdded', listener);
+export function addOnParticipantStreamsAddedListener(listener) {
+    return ExpoRealtimeIvsBroadcastModule.addListener('onParticipantStreamsAdded', listener);
 }
-function addOnParticipantStreamsRemovedListener(listener) {
-    return ExpoRealtimeIvsBroadcastModule_1.default.addListener('onParticipantStreamsRemoved', listener);
+export function addOnParticipantStreamsRemovedListener(listener) {
+    return ExpoRealtimeIvsBroadcastModule.addListener('onParticipantStreamsRemoved', listener);
 }
 //# sourceMappingURL=index.js.map
