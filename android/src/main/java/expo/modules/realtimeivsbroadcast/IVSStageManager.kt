@@ -77,6 +77,10 @@ class IVSStageManager(private val context: Context) : Stage.Strategy, StageRende
         return localCamera
     }
 
+    fun isFrontCameraActive(): Boolean {
+        return localCamera?.descriptor?.position == Device.Descriptor.Position.FRONT
+    }
+
     fun initializeLocalStreams() {
         discoverDevices()
 

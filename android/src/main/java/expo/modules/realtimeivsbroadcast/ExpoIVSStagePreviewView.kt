@@ -53,7 +53,7 @@ class ExpoIVSStagePreviewView(context: Context, appContext: AppContext) : ExpoVi
         for (i in 0 until count) {
             val child = getChildAt(i) ?: continue // Skip null children
             try {
-                child.layout(0, 0, childWidth, childHeight)
+            child.layout(0, 0, childWidth, childHeight)
             } catch (e: Exception) {
                 Log.w("ExpoIVSStagePreviewView", "Error laying out child $i: ${e.message}")
             }
@@ -78,7 +78,7 @@ class ExpoIVSStagePreviewView(context: Context, appContext: AppContext) : ExpoVi
         for (i in 0 until count) {
             val child = getChildAt(i) ?: continue // Skip null children
             try {
-                child.measure(childWidthSpec, childHeightSpec)
+            child.measure(childWidthSpec, childHeightSpec)
             } catch (e: Exception) {
                 Log.w("ExpoIVSStagePreviewView", "Error measuring child $i: ${e.message}")
             }
@@ -259,9 +259,9 @@ class ExpoIVSStagePreviewView(context: Context, appContext: AppContext) : ExpoVi
                             val wSpec = MeasureSpec.makeMeasureSpec(w, MeasureSpec.EXACTLY)
                             val hSpec = MeasureSpec.makeMeasureSpec(h, MeasureSpec.EXACTLY)
                             try {
-                                preview.measure(wSpec, hSpec)
-                                preview.layout(0, 0, w, h)
-                                Log.i("ExpoIVSStagePreviewView", "📐 Deferred layout: preview now ${preview.measuredWidth}x${preview.measuredHeight}")
+                            preview.measure(wSpec, hSpec)
+                            preview.layout(0, 0, w, h)
+                            Log.i("ExpoIVSStagePreviewView", "📐 Deferred layout: preview now ${preview.measuredWidth}x${preview.measuredHeight}")
                             } catch (e: Exception) {
                                 Log.w("ExpoIVSStagePreviewView", "📐 Deferred layout error: ${e.message}")
                             }
@@ -328,8 +328,8 @@ class ExpoIVSStagePreviewView(context: Context, appContext: AppContext) : ExpoVi
         mainHandler.postDelayed({
             // Double-check we're still attached before trying to attach stream
             if (isViewAttached) {
-                Log.i("ExpoIVSStagePreviewView", "🔄 Now attaching new preview after delay")
-                attachStreamWithRetry()
+            Log.i("ExpoIVSStagePreviewView", "🔄 Now attaching new preview after delay")
+            attachStreamWithRetry()
             } else {
                 Log.w("ExpoIVSStagePreviewView", "🔄 Skipping attach - view no longer attached")
             }
@@ -337,13 +337,39 @@ class ExpoIVSStagePreviewView(context: Context, appContext: AppContext) : ExpoVi
     }
     
     private fun applyProps() {
-        setMirror(this.mirror)
+        applyMirror()
         setScaleMode(this.scaleMode)
+    }
+
+    /**
+     * Apply mirroring based on camera position and user preference.
+     * 
+     * Front camera: By default, Android shows a "selfie" view (mirrored like a mirror).
+     * We apply setMirrored(true) to show the "true" view (as others see you).
+     * The user's mirror prop can override this behavior.
+     * 
+     * Back camera: No automatic mirroring applied, only user's mirror prop if set.
+     */
+    private fun applyMirror() {
+        val isFrontCamera = stageManager?.isFrontCameraActive() ?: false
+        
+        // For front camera: apply mirror to counter the natural selfie mirroring
+        // This makes it so moving left shows you moving left (true view)
+        // If user sets mirror=true on a front camera, it will show selfie view
+        // For back camera: just use the mirror prop as-is
+        val shouldMirror = if (isFrontCamera) {
+            !this.mirror // Invert: default (false) becomes true to counter selfie view
+        } else {
+            this.mirror // Back camera: use mirror prop directly
+        }
+        
+        Log.d("ExpoIVSStagePreviewView", "📷 applyMirror: isFrontCamera=$isFrontCamera, mirrorProp=${this.mirror}, shouldMirror=$shouldMirror")
+        (ivsImagePreviewView as? ImagePreviewView)?.setMirrored(shouldMirror)
     }
 
     fun setMirror(mirror: Boolean) {
         this.mirror = mirror
-        (ivsImagePreviewView as? ImagePreviewView)?.setMirrored(this.mirror)
+        applyMirror()
     }
 
     fun setScaleMode(mode: String) {
