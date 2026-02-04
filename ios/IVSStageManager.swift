@@ -1060,10 +1060,21 @@ class IVSStageManager: NSObject, IVSStageStreamDelegate, IVSStageStrategy, IVSSt
             } catch {
                 print("🖼️ [PiP] Warning: Could not get preview view from device: \(error)")
                 // Try to find a remote view that's rendering this device
-                if let remoteView = remoteViews.compactMap({ $0.value }).first(where: { $0.currentRenderedDeviceUrn == device.descriptor().urn }),
-                   let previewViewForPiP = remoteView.previewViewForPiP {
+                if let remoteView = remoteViews.compactMap({ $0.value }).first(where: { $0.currentRenderedDeviceUrn == device.descriptor().urn }) {
+                    // Always set up with the remote view container - it's the visible video view
                     pipController.setupWithSourceView(remoteView as UIView)
-                    pipTargetView = previewViewForPiP
+                    // Use the inner preview view if available, otherwise use the container
+                    pipTargetView = remoteView.previewViewForPiP ?? remoteView
+                    print("🖼️ [PiP] Set up with remote view container")
+                } else {
+                    // Last resort: try to find ANY registered remote view that's rendering video
+                    if let anyRemoteView = remoteViews.compactMap({ $0.value }).first(where: { $0.isRenderingVideo }) {
+                        pipController.setupWithSourceView(anyRemoteView as UIView)
+                        pipTargetView = anyRemoteView.previewViewForPiP ?? anyRemoteView
+                        print("🖼️ [PiP] Set up with fallback remote view")
+                    } else {
+                        print("🖼️ [PiP] ERROR: No source view found for PiP - controller will not be initialized!")
+                    }
                 }
             }
         }
@@ -1117,6 +1128,12 @@ class IVSStageManager: NSObject, IVSStageStreamDelegate, IVSStageStrategy, IVSSt
                     // Cast to UIView explicitly since ExpoIVSRemoteStreamView extends ExpoView -> UIView
                     candidateSourceView = remoteView as UIView
                     print("🖼️ [PiP] Found matching remote view for source")
+                } else {
+                    // Fallback: use any remote view that's rendering video
+                    if let anyRenderingView = remoteViews.compactMap({ $0.value }).first(where: { $0.isRenderingVideo }) {
+                        candidateSourceView = anyRenderingView as UIView
+                        print("🖼️ [PiP] Using fallback remote view for source (URN mismatch)")
+                    }
                 }
                 
                 attachToDevice(imageDevice, sourceView: candidateSourceView)
