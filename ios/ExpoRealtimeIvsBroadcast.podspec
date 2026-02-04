@@ -13,7 +13,7 @@ Pod::Spec.new do |s|
   s.platforms      = {
     :ios => '14.0'
   }
-  s.swift_version  = '5.4'
+  s.swift_version  = '5.9'
   s.source         = { git: 'https://github.com/ArviinM/expo-realtime-ivs-broadcast' }
   s.static_framework = true
 
@@ -25,5 +25,6 @@ Pod::Spec.new do |s|
     'DEFINES_MODULE' => 'YES',
   }
 
-  s.source_files = "ExpoRealtimeIvsBroadcastModule.swift", "IVSStageManager.swift", "ExpoIVSStagePreviewView.swift", "ExpoIVSRemoteStreamView.swift"
+  # Include all Swift files in the ios directory
+  s.source_files = "**/*.swift"
 end

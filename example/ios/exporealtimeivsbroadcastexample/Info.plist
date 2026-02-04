@@ -44,10 +44,8 @@
       <key>NSAllowsLocalNetworking</key>
       <true/>
     </dict>
-    <key>NSCameraUsageDescription</key>
-    <string>This app uses the camera to allow you to broadcast video.</string>
-    <key>NSMicrophoneUsageDescription</key>
-    <string>This app uses the microphone to allow you to broadcast audio.</string>
+    <key>RCTNewArchEnabled</key>
+    <true/>
     <key>UILaunchStoryboardName</key>
     <string>SplashScreen</string>
     <key>UIRequiredDeviceCapabilities</key>
@@ -74,5 +72,13 @@
     <string>Light</string>
     <key>UIViewControllerBasedStatusBarAppearance</key>
     <false/>
+    <key>NSCameraUsageDescription</key>
+    <string>Allow this app to use your camera to broadcast video.</string>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>Allow this app to use your microphone to broadcast audio.</string>
+    <key>UIBackgroundModes</key>
+    <array>
+      <string>audio</string>
+    </array>
   </dict>
 </plist>

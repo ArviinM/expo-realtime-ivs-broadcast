@@ -1,5 +1,6 @@
 import ExpoModulesCore
 import AVFoundation // For permissions
+import AVKit // For PiP
 import AmazonIVSBroadcast // For config types if passed directly
 
 public class ExpoRealtimeIvsBroadcastModule: Module, IVSStageManagerDelegate {
@@ -15,7 +16,7 @@ public class ExpoRealtimeIvsBroadcastModule: Module, IVSStageManagerDelegate {
     // The module will be accessible from `requireNativeModule('ExpoRealtimeIvsBroadcast')` in JavaScript.
     Name("ExpoRealtimeIvsBroadcast")
     // Defines event names that the module can send to JavaScript.
-    Events("onStageConnectionStateChanged", "onPublishStateChanged", "onStageError", "onCameraSwapped", "onCameraSwapError", "onParticipantJoined", "onParticipantLeft", "onParticipantStreamsAdded", "onParticipantStreamsRemoved")
+    Events("onStageConnectionStateChanged", "onPublishStateChanged", "onStageError", "onCameraSwapped", "onCameraSwapError", "onParticipantJoined", "onParticipantLeft", "onParticipantStreamsAdded", "onParticipantStreamsRemoved", "onPiPStateChanged", "onPiPError")
 
     // Initialize the IVSStageManager when the module is created
     // and set self as its delegate.
@@ -76,6 +77,50 @@ public class ExpoRealtimeIvsBroadcastModule: Module, IVSStageManagerDelegate {
       group.notify(queue: .main) {
         promise.resolve(permissions)
       }
+    }
+    
+    // MARK: - Picture-in-Picture Methods
+    
+    AsyncFunction("enablePictureInPicture") { (options: [String: Any]?) -> Bool in
+      if #available(iOS 15.0, *) {
+        self.ivsStageManager?.enablePictureInPicture(options: options)
+        return true
+      } else {
+        print("PiP requires iOS 15.0 or later")
+        return false
+      }
+    }
+    
+    AsyncFunction("disablePictureInPicture") { () -> Void in
+      if #available(iOS 15.0, *) {
+        self.ivsStageManager?.disablePictureInPicture()
+      }
+    }
+    
+    AsyncFunction("startPictureInPicture") { () -> Void in
+      if #available(iOS 15.0, *) {
+        self.ivsStageManager?.startPictureInPicture()
+      }
+    }
+    
+    AsyncFunction("stopPictureInPicture") { () -> Void in
+      if #available(iOS 15.0, *) {
+        self.ivsStageManager?.stopPictureInPicture()
+      }
+    }
+    
+    AsyncFunction("isPictureInPictureActive") { () -> Bool in
+      if #available(iOS 15.0, *) {
+        return self.ivsStageManager?.isPictureInPictureActive() ?? false
+      }
+      return false
+    }
+    
+    AsyncFunction("isPictureInPictureSupported") { () -> Bool in
+      if #available(iOS 15.0, *) {
+        return AVPictureInPictureController.isPictureInPictureSupported()
+      }
+      return false
     }
     
     View(ExpoIVSStagePreviewView.self) {

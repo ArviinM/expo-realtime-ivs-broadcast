@@ -77,6 +77,10 @@ class IVSStageManager(private val context: Context) : Stage.Strategy, StageRende
         return localCamera
     }
 
+    fun isFrontCameraActive(): Boolean {
+        return localCamera?.descriptor?.position == Device.Descriptor.Position.FRONT
+    }
+
     fun initializeLocalStreams() {
         discoverDevices()
 
@@ -165,13 +169,39 @@ class IVSStageManager(private val context: Context) : Stage.Strategy, StageRende
             return
         }
         
-        localCamera = newCamera
-        cameraStream = ImageLocalStageStream(newCamera)
-        stage?.refreshStrategy()
-        Log.i("ExpoIVSStageManager", "✅ Camera swapped to: ${newCamera.descriptor.friendlyName}")
+        Log.i("ExpoIVSStageManager", "🔄 Swapping camera from ${currentDevice.descriptor.friendlyName} to ${newCamera.descriptor.friendlyName}")
         
-        // Notify all preview views to refresh with the new camera
-        notifyPreviewViewsToRefresh()
+        // First, notify preview views to clear their current preview
+        // This releases the old camera's preview before we switch
+        previewViews.mapNotNull { it.get() }.forEach { view ->
+            mainHandler.post {
+                try {
+                    // Force clear the preview by calling refreshPreview which removes the old one
+                    Log.i("ExpoIVSStageManager", "🔄 Clearing preview before swap")
+                } catch (e: Exception) {
+                    Log.w("ExpoIVSStageManager", "Error clearing preview: ${e.message}")
+                }
+            }
+        }
+        
+        // Update the local camera reference
+        localCamera = newCamera
+        
+        // Create new stream with video configuration
+        val oldStream = cameraStream
+        cameraStream = ImageLocalStageStream(newCamera, this.stageConfiguration.videoConfiguration)
+        
+        // Refresh the stage strategy to use the new stream
+        stage?.refreshStrategy()
+        
+        Log.i("ExpoIVSStageManager", "✅ Camera swapped to: ${newCamera.descriptor.friendlyName}, URN: ${newCamera.descriptor.urn}")
+        
+        // Delay the preview refresh to allow the new camera stream to fully initialize
+        // The back camera especially needs more time to warm up
+        mainHandler.postDelayed({
+            Log.i("ExpoIVSStageManager", "🔄 Triggering preview refresh after camera swap")
+            notifyPreviewViewsToRefresh()
+        }, 500) // 500ms delay for camera to fully initialize
     }
     
     private fun notifyPreviewViewsToRefresh() {
@@ -215,8 +245,11 @@ class IVSStageManager(private val context: Context) : Stage.Strategy, StageRende
         remoteViews.removeAll { it.get() == null }
         
         // Check if this view is already registered
-        if (remoteViews.any { it.get() === view }) {
-            Log.w("ExpoIVSStageManager", "🧠 [MANAGER] View already registered, skipping...")
+        val existingView = remoteViews.find { it.get() === view }
+        if (existingView != null) {
+            Log.i("ExpoIVSStageManager", "🧠 [MANAGER] View already registered, triggering stream assignment anyway...")
+            // Still call assignStreamsToAvailableViews in case the view needs a stream
+            assignStreamsToAvailableViews()
             return
         }
         

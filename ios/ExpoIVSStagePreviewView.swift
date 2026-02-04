@@ -42,6 +42,11 @@ class ExpoIVSStagePreviewView: ExpoView {
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
     }
+    
+    deinit {
+        // Unregister from PiP when view is deallocated
+        stageManager?.registerLocalPreviewView(nil)
+    }
 
     private func resolveStageManagerAndStream() {
         guard let moduleRegistry = appContext?.moduleRegistry else {
@@ -107,6 +112,9 @@ class ExpoIVSStagePreviewView: ExpoView {
         updateCustomPreviewMirror()
         
         print("ExpoIVSStagePreviewView: ✅ Custom preview layer attached, frame: \(bounds)")
+        
+        // Register this view with the stage manager for PiP support
+        registerForPiP()
     }
     
     private func attachNativePreview() {
@@ -158,6 +166,9 @@ class ExpoIVSStagePreviewView: ExpoView {
             updateScaleMode()
 
             print("ExpoIVSStagePreviewView: ✅ Native IVS preview attached for \(newDeviceUrn)")
+            
+            // Register this view with the stage manager for PiP support
+            registerForPiP()
 
         } catch {
             print("ExpoIVSStagePreviewView: Failed to create IVSImagePreviewView: \(error)")
@@ -210,6 +221,13 @@ class ExpoIVSStagePreviewView: ExpoView {
     func refreshStream() {
         print("ExpoIVSStagePreviewView: refreshStream() called.")
         attachStream()
+    }
+    
+    /// Register this view with the stage manager for PiP (Picture-in-Picture) support
+    private func registerForPiP() {
+        // Use self as the source view since this is the container that shows the video
+        stageManager?.registerLocalPreviewView(self)
+        print("ExpoIVSStagePreviewView: Registered for PiP support")
     }
     
     override func layoutSubviews() {
