@@ -302,6 +302,9 @@ public class IVSPictureInPictureController: NSObject {
     private var viewFrameCapture: ViewFrameCapture?
     private weak var captureTargetView: UIView?
     
+    // Pending source view (when setup is deferred because view is not in window)
+    private weak var pendingSourceView: UIView?
+    
     // Placeholder frame generator for broadcaster PiP (when camera is unavailable in background)
     private var placeholderTimer: Timer?
     private var placeholderPixelBuffer: CVPixelBuffer?
@@ -441,6 +444,57 @@ public class IVSPictureInPictureController: NSObject {
             return
         }
         
+        // IMPORTANT: Check if the source view is in a window hierarchy
+        // If not, defer setup until it is
+        if sourceView.window == nil {
+            print("🖼️ [PiP] Warning: Source view not in window hierarchy yet. Deferring setup...")
+            self.pendingSourceView = sourceView
+            
+            // Observe when the view gets added to window
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self, weak sourceView] in
+                guard let self = self, let view = sourceView else { return }
+                if view.window != nil {
+                    print("🖼️ [PiP] Source view now in window, completing setup")
+                    self.pendingSourceView = nil
+                    self.completeSetupWithSourceView(view, pipVideoCallVC: pipVideoCallVC)
+                } else {
+                    // Retry with increasing delays
+                    self.retrySetupWithSourceView(view, pipVideoCallVC: pipVideoCallVC, attempt: 1)
+                }
+            }
+            return
+        }
+        
+        completeSetupWithSourceView(sourceView, pipVideoCallVC: pipVideoCallVC)
+    }
+    
+    /// Retry setup with exponential backoff
+    private func retrySetupWithSourceView(_ sourceView: UIView, pipVideoCallVC: AVPictureInPictureVideoCallViewController, attempt: Int) {
+        let maxAttempts = 10
+        let delay = min(0.1 * pow(1.5, Double(attempt)), 2.0) // Max 2 second delay
+        
+        guard attempt < maxAttempts else {
+            print("🖼️ [PiP] Warning: Source view still not in window after \(maxAttempts) attempts. Setting up anyway...")
+            completeSetupWithSourceView(sourceView, pipVideoCallVC: pipVideoCallVC)
+            return
+        }
+        
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self, weak sourceView] in
+            guard let self = self, let view = sourceView else { return }
+            
+            if view.window != nil {
+                print("🖼️ [PiP] Source view now in window (attempt \(attempt + 1)), completing setup")
+                self.pendingSourceView = nil
+                self.completeSetupWithSourceView(view, pipVideoCallVC: pipVideoCallVC)
+            } else {
+                print("🖼️ [PiP] Source view still not in window (attempt \(attempt + 1)), retrying...")
+                self.retrySetupWithSourceView(view, pipVideoCallVC: pipVideoCallVC, attempt: attempt + 1)
+            }
+        }
+    }
+    
+    /// Actually complete the PiP setup once we have a valid source view
+    private func completeSetupWithSourceView(_ sourceView: UIView, pipVideoCallVC: AVPictureInPictureVideoCallViewController) {
         self.activeSourceView = sourceView
         self.pipContainerView = sourceView
         
@@ -459,15 +513,43 @@ public class IVSPictureInPictureController: NSObject {
         
         self.pipController = controller
         
-        // Pre-warm with placeholder frames so PiP is possible immediately
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
-            for _ in 0..<3 {
-                self?.enqueuePlaceholderFrame()
-            }
+        // Pre-warm with more placeholder frames and longer delay to ensure PiP is possible
+        print("🖼️ [PiP] Pre-warming display layer with placeholder frames...")
+        aggressivePreWarm { [weak self, weak controller] in
+            guard let self = self, let controller = controller else { return }
+            print("🖼️ [PiP] Setup complete with source view: \(sourceView)")
+            print("🖼️ [PiP] Source view in window: \(sourceView.window != nil)")
+            print("🖼️ [PiP] isPictureInPicturePossible: \(controller.isPictureInPicturePossible)")
+        }
+    }
+    
+    /// Aggressive pre-warming to ensure display layer is ready
+    private func aggressivePreWarm(completion: @escaping () -> Void) {
+        // Enqueue initial batch of frames immediately
+        for _ in 0..<5 {
+            enqueuePlaceholderFrame()
         }
         
-        print("🖼️ [PiP] Setup complete with source view: \(sourceView)")
-        print("🖼️ [PiP] isPictureInPicturePossible: \(controller.isPictureInPicturePossible)")
+        // Then enqueue more frames over time to ensure the layer is warm
+        var framesEnqueued = 5
+        let timer = Timer.scheduledTimer(withTimeInterval: 0.033, repeats: true) { [weak self] timer in
+            guard let self = self else {
+                timer.invalidate()
+                return
+            }
+            
+            self.enqueuePlaceholderFrame()
+            framesEnqueued += 1
+            
+            // After 15 frames (~0.5s), check if PiP is possible
+            if framesEnqueued >= 15 {
+                timer.invalidate()
+                DispatchQueue.main.async {
+                    completion()
+                }
+            }
+        }
+        RunLoop.main.add(timer, forMode: .common)
     }
     
     /// Disable PiP
@@ -535,23 +617,67 @@ public class IVSPictureInPictureController: NSObject {
     }
     
     /// Pre-warm the display layer with placeholder frames to make PiP possible
+    /// Uses aggressive pre-warming with retry logic
     private func preWarmWithPlaceholder(completion: @escaping (Bool) -> Void) {
-        guard let pixelBuffer = placeholderPixelBuffer else {
+        guard placeholderPixelBuffer != nil else {
+            print("🖼️ [PiP] No placeholder buffer available")
             completion(false)
             return
         }
         
-        // Enqueue several placeholder frames to prime the display layer
-        for _ in 0..<5 {
-            enqueuePlaceholderFrame()
+        // Check if source view is in window - if not, that's likely the issue
+        if let sourceView = activeSourceView {
+            print("🖼️ [PiP] Pre-warm: Source view in window: \(sourceView.window != nil)")
+            if sourceView.window == nil {
+                print("🖼️ [PiP] Warning: Source view not in window during pre-warm!")
+            }
         }
         
-        // Wait a moment for frames to be processed, then check if PiP is possible
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
-            let isPossible = self?.pipController?.isPictureInPicturePossible ?? false
-            print("🖼️ [PiP] Pre-warm complete, isPictureInPicturePossible: \(isPossible)")
-            completion(isPossible)
+        // Use aggressive pre-warming with polling
+        var attemptCount = 0
+        let maxAttempts = 5
+        
+        func tryPreWarm() {
+            attemptCount += 1
+            
+            // Enqueue a batch of frames
+            for _ in 0..<10 {
+                enqueuePlaceholderFrame()
+            }
+            
+            // Use increasing delays for each attempt
+            let delay = 0.15 * Double(attemptCount)
+            
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+                guard let self = self else {
+                    completion(false)
+                    return
+                }
+                
+                let isPossible = self.pipController?.isPictureInPicturePossible ?? false
+                print("🖼️ [PiP] Pre-warm attempt \(attemptCount)/\(maxAttempts), isPictureInPicturePossible: \(isPossible)")
+                
+                if isPossible {
+                    completion(true)
+                } else if attemptCount < maxAttempts {
+                    // Try again with more frames
+                    tryPreWarm()
+                } else {
+                    // Final attempt - log diagnostic info
+                    print("🖼️ [PiP] Pre-warm failed after \(maxAttempts) attempts")
+                    if let sourceView = self.activeSourceView {
+                        print("🖼️ [PiP] - Source view in window: \(sourceView.window != nil)")
+                        print("🖼️ [PiP] - Source view frame: \(sourceView.frame)")
+                        print("🖼️ [PiP] - Source view hidden: \(sourceView.isHidden)")
+                    }
+                    print("🖼️ [PiP] - Display layer status: \(self.sampleBufferDisplayLayer?.status.rawValue ?? -1)")
+                    print("🖼️ [PiP] - Frames enqueued: \(self.enqueuedFrameCount)")
+                    completion(false)
+                }
+            }
         }
+        
+        tryPreWarm()
     }
     
     /// Stop PiP manually

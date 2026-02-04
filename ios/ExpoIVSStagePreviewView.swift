@@ -224,10 +224,16 @@ class ExpoIVSStagePreviewView: ExpoView {
     }
     
     /// Register this view with the stage manager for PiP (Picture-in-Picture) support
+    /// Only registers when the view is actually in a window hierarchy
     private func registerForPiP() {
-        // Use self as the source view since this is the container that shows the video
-        stageManager?.registerLocalPreviewView(self)
-        print("ExpoIVSStagePreviewView: Registered for PiP support")
+        // Only register if we're in a window - PiP requires a visible source view
+        if window != nil {
+            stageManager?.registerLocalPreviewView(self)
+            print("ExpoIVSStagePreviewView: Registered for PiP support (view is in window)")
+        } else {
+            print("ExpoIVSStagePreviewView: Deferring PiP registration until view is in window")
+            // Will be registered in didMoveToWindow
+        }
     }
     
     override func layoutSubviews() {
@@ -244,12 +250,22 @@ class ExpoIVSStagePreviewView: ExpoView {
     
     override func didMoveToWindow() {
         super.didMoveToWindow()
-        // When the view is added to a window, try to attach stream if not already done
-        if window != nil && customPreviewLayer == nil && ivsImagePreviewView == nil {
-            print("ExpoIVSStagePreviewView: didMoveToWindow - attempting to attach stream")
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
-                self?.attachStream()
+        if window != nil {
+            // When the view is added to a window, try to attach stream if not already done
+            if customPreviewLayer == nil && ivsImagePreviewView == nil {
+                print("ExpoIVSStagePreviewView: didMoveToWindow - attempting to attach stream")
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+                    self?.attachStream()
+                }
+            } else {
+                // Stream already attached, but now we can register for PiP since we're in a window
+                print("ExpoIVSStagePreviewView: didMoveToWindow - registering for PiP now that view is in window")
+                stageManager?.registerLocalPreviewView(self)
             }
+        } else {
+            // View removed from window - unregister from PiP
+            print("ExpoIVSStagePreviewView: didMoveToWindow - view removed from window, unregistering PiP")
+            stageManager?.registerLocalPreviewView(nil)
         }
     }
 }
