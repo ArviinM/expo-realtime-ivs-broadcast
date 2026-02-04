@@ -304,6 +304,8 @@ class IVSStageManager: NSObject, IVSStageStreamDelegate, IVSStageStrategy, IVSSt
     private var currentPiPDevice: IVSImageDevice?
     // Store the local preview view for broadcaster PiP
     private weak var localPreviewView: UIView?
+    // Track whether we have a valid visible source view (not just device.previewView())
+    private var pipHasValidSourceView: Bool = false
     
     @available(iOS 15.0, *)
     private var pipController: IVSPictureInPictureController {
@@ -1026,19 +1028,22 @@ class IVSStageManager: NSObject, IVSStageStreamDelegate, IVSStageStrategy, IVSSt
         currentPiPDevice = nil
         currentPiPSourceDeviceUrn = nil
         pipTargetView = nil
+        pipHasValidSourceView = false
     }
     
     /// Attach frame callback to an IVS Image Device
     @available(iOS 15.0, *)
     private func attachToDevice(_ device: IVSImageDevice, sourceView: UIView? = nil) {
-        // If we are already attached to this device, do nothing
-        if currentPiPDevice === device {
+        // If we are already attached to this device AND have a valid source view, do nothing
+        if currentPiPDevice === device && pipHasValidSourceView {
+            print("🖼️ [PiP] Already attached to device with valid source view, skipping")
             return
         }
         
         // If attached to another device, detach first
-        if let oldDevice = currentPiPDevice {
+        if let oldDevice = currentPiPDevice, oldDevice !== device {
             oldDevice.setOnFrameCallback(nil)
+            print("🖼️ [PiP] Detached from previous device")
         }
         
         currentPiPDevice = device
@@ -1051,39 +1056,44 @@ class IVSStageManager: NSObject, IVSStageStreamDelegate, IVSStageStrategy, IVSSt
         if let view = sourceView {
             pipController.setupWithSourceView(view)
             pipTargetView = view
+            pipHasValidSourceView = true
+            print("🖼️ [PiP] Set up with provided source view (VALID)")
         } else {
-            // Try to get a preview view from the device
-            do {
-                let previewView = try device.previewView()
-                pipController.setupWithSourceView(previewView)
-                pipTargetView = previewView
-                print("🖼️ [PiP] Set up with device preview view")
-            } catch {
-                print("🖼️ [PiP] Warning: Could not get preview view from device: \(error)")
-                // Try to find a remote view that's rendering this device
-                if let remoteView = remoteViews.compactMap({ $0.value }).first(where: { $0.currentRenderedDeviceUrn == device.descriptor().urn }) {
-                    // Always set up with the remote view container - it's the visible video view
-                    pipController.setupWithSourceView(remoteView as UIView)
-                    pipTargetView = remoteView.previewViewForPiP ?? remoteView
-                    print("🖼️ [PiP] Set up with matching remote view container")
-                } else if let anyRenderingView = remoteViews.compactMap({ $0.value }).first(where: { $0.isRenderingVideo }) {
-                    // Fallback: use any view that's rendering
-                    pipController.setupWithSourceView(anyRenderingView as UIView)
-                    pipTargetView = anyRenderingView.previewViewForPiP ?? anyRenderingView
-                    print("🖼️ [PiP] Set up with fallback rendering view")
-                } else if let anyView = remoteViews.compactMap({ $0.value }).first {
-                    // Last resort: use any registered view
-                    pipController.setupWithSourceView(anyView as UIView)
-                    pipTargetView = anyView
-                    print("🖼️ [PiP] Set up with any available view (last resort)")
-                } else {
-                    print("🖼️ [PiP] ERROR: No source view found for PiP - controller will NOT be initialized!")
+            // For remote streams, device.previewView() returns an internal view that's not visible
+            // We should prefer finding a registered remote view first
+            if let remoteView = remoteViews.compactMap({ $0.value }).first(where: { $0.currentRenderedDeviceUrn == device.descriptor().urn }) {
+                pipController.setupWithSourceView(remoteView as UIView)
+                pipTargetView = remoteView.previewViewForPiP ?? remoteView
+                pipHasValidSourceView = true
+                print("🖼️ [PiP] Set up with matching remote view container (VALID)")
+            } else if let anyRenderingView = remoteViews.compactMap({ $0.value }).first(where: { $0.isRenderingVideo }) {
+                pipController.setupWithSourceView(anyRenderingView as UIView)
+                pipTargetView = anyRenderingView.previewViewForPiP ?? anyRenderingView
+                pipHasValidSourceView = true
+                print("🖼️ [PiP] Set up with fallback rendering view (VALID)")
+            } else if let anyView = remoteViews.compactMap({ $0.value }).first {
+                pipController.setupWithSourceView(anyView as UIView)
+                pipTargetView = anyView
+                pipHasValidSourceView = true
+                print("🖼️ [PiP] Set up with any available view (VALID)")
+            } else {
+                // Last resort: try device.previewView() - but mark as NOT valid for remote streams
+                // This allows frame capture to start, but we'll re-setup when a remote view becomes available
+                do {
+                    let previewView = try device.previewView()
+                    pipController.setupWithSourceView(previewView)
+                    pipTargetView = previewView
+                    // Mark as NOT valid - we need to re-setup when remote view is available
+                    pipHasValidSourceView = false
+                    print("🖼️ [PiP] Set up with device preview view (NOT VALID - will re-setup when remote view available)")
+                } catch {
+                    print("🖼️ [PiP] ERROR: Could not get any preview view: \(error)")
+                    pipHasValidSourceView = false
                 }
             }
         }
         
-        // Set frame callback to receive CVPixelBuffers
-        // Using a dedicated queue for better performance
+        // Set frame callback to receive CVPixelBuffers (only if not already set on this device)
         let frameQueue = DispatchQueue(label: "com.ivs.pip.frameCallback", qos: .userInteractive)
         device.setOnFrameCallbackQueue(frameQueue, includePixelBuffer: true) { [weak self] frame in
             guard let self = self else { return }
@@ -1121,9 +1131,15 @@ class IVSStageManager: NSObject, IVSStageStreamDelegate, IVSStageStrategy, IVSSt
         }
         
         if let stream = candidateStream, let imageDevice = stream.device as? IVSImageDevice {
-            // Found a valid video stream, attach to it
-            if currentPiPSourceDeviceUrn != imageDevice.descriptor().urn {
-                print("🖼️ [PiP] Found new remote video stream: \(imageDevice.descriptor().urn)")
+            // Found a valid video stream
+            // Re-attach if: 1) different device, OR 2) same device but we don't have a valid source view yet
+            let needsSetup = currentPiPSourceDeviceUrn != imageDevice.descriptor().urn || !pipHasValidSourceView
+            
+            if needsSetup {
+                let isNewDevice = currentPiPSourceDeviceUrn != imageDevice.descriptor().urn
+                let reason = isNewDevice ? "new device" : "need valid source view"
+                print("🖼️ [PiP] Setting up PiP for remote video stream (\(reason)): \(imageDevice.descriptor().urn)")
+                print("🖼️ [PiP]   pipHasValidSourceView: \(pipHasValidSourceView)")
                 
                 // Debug: Log all registered remote views and their URNs
                 print("🖼️ [PiP] Registered remote views: \(remoteViews.count)")
@@ -1146,6 +1162,8 @@ class IVSStageManager: NSObject, IVSStageStreamDelegate, IVSStageStrategy, IVSSt
                         // Last resort: use any registered view
                         candidateSourceView = anyView as UIView
                         print("🖼️ [PiP] Using any available remote view as last resort")
+                    } else {
+                        print("🖼️ [PiP] No remote views available yet - will retry when view registers")
                     }
                 }
                 
