@@ -920,18 +920,38 @@ class IVSStageManager: NSObject, IVSStageStreamDelegate, IVSStageStrategy, IVSSt
     }
     
     // MARK: - PiP Frame Capture Setup
+    //
+    // PiP uses the Video Call API which requires:
+    // 1. setupWithSourceView() - sets the visible view that shows video in the app
+    // 2. enqueueFrame() - feeds video frames to the PiP display layer
+    //
+    // LOCAL (Broadcaster) PiP:
+    // - Source view: ExpoIVSStagePreviewView (local camera preview)
+    // - Frame source: IVSImageDevice from cameraStream (IVSCamera or IVSCustomImageSource)
+    // - The device frame callback provides CVPixelBuffers directly
+    //
+    // REMOTE (Viewer) PiP:
+    // - Source view: ExpoIVSRemoteStreamView (remote video preview)
+    // - Frame source: IVSImageDevice from remote participant's video stream
+    // - The device frame callback provides CVPixelBuffers from WebRTC
+    //
+    // Both use the SAME Video Call API approach - the only difference is:
+    // - Which view is used as the source view
+    // - Which IVSImageDevice provides the frames
     
     @available(iOS 15.0, *)
     private func setupPiPFrameCapture() {
         if _pipOptions.sourceView == .local {
-            // For local camera (broadcaster mode)
+            // LOCAL/BROADCASTER MODE
+            // Use the local camera preview view and camera stream device
             if let sourceView = localPreviewView {
                 setupLocalCameraPiP(sourceView: sourceView)
             } else {
                 print("🖼️ [PiP] Warning: Local preview view not registered yet. PiP will be set up when view is registered.")
             }
         } else {
-            // For remote streams, use IVSImageDevice frame callback
+            // REMOTE/VIEWER MODE
+            // Use the remote stream view and remote participant's video device
             updatePiPSourceIfNeeded()
         }
     }
@@ -1031,7 +1051,14 @@ class IVSStageManager: NSObject, IVSStageStreamDelegate, IVSStageStrategy, IVSSt
         pipHasValidSourceView = false
     }
     
-    /// Attach frame callback to an IVS Image Device
+    /// Attach frame callback to an IVS Image Device (primarily for REMOTE streams)
+    ///
+    /// This function is called for remote/viewer PiP:
+    /// 1. Sets up the Video Call API source view (ExpoIVSRemoteStreamView)
+    /// 2. Attaches frame callback to the remote participant's IVSImageDevice
+    /// 3. The device callback provides frames from the WebRTC stream
+    ///
+    /// For local/broadcaster PiP, use setupLocalCameraPiP() instead.
     @available(iOS 15.0, *)
     private func attachToDevice(_ device: IVSImageDevice, sourceView: UIView? = nil) {
         // If we are already attached to this device AND have a valid source view, do nothing
@@ -1093,38 +1120,26 @@ class IVSStageManager: NSObject, IVSStageStreamDelegate, IVSStageStrategy, IVSSt
             }
         }
         
-        // For remote streams, the device frame callback may not work properly
-        // Use ViewFrameCapture to capture frames from the actual UIView instead
-        if _pipOptions.sourceView == .remote {
-            // Use view capture for remote streams - more reliable than device callback
-            if let targetView = pipTargetView {
-                print("🖼️ [PiP] Using ViewFrameCapture for remote stream")
-                pipController.startViewCapture(from: targetView)
-            } else {
-                print("🖼️ [PiP] Warning: No target view for ViewFrameCapture, trying device callback")
-                // Fallback to device callback
-                let frameQueue = DispatchQueue(label: "com.ivs.pip.frameCallback", qos: .userInteractive)
-                device.setOnFrameCallbackQueue(frameQueue, includePixelBuffer: true) { [weak self] frame in
-                    guard let self = self else { return }
-                    if let pixelBuffer = frame.pixelBuffer {
-                        self.pipController.enqueueFrame(pixelBuffer)
-                    }
-                }
-            }
-        } else {
-            // For local streams (broadcaster), use device frame callback
-            print("🖼️ [PiP] Using device frame callback for local stream")
-            let frameQueue = DispatchQueue(label: "com.ivs.pip.frameCallback", qos: .userInteractive)
-            device.setOnFrameCallbackQueue(frameQueue, includePixelBuffer: true) { [weak self] frame in
-                guard let self = self else { return }
-                if let pixelBuffer = frame.pixelBuffer {
-                    self.pipController.enqueueFrame(pixelBuffer)
-                }
+        // Set frame callback to receive CVPixelBuffers (only if not already set on this device)
+        let frameQueue = DispatchQueue(label: "com.ivs.pip.frameCallback", qos: .userInteractive)
+        device.setOnFrameCallbackQueue(frameQueue, includePixelBuffer: true) { [weak self] frame in
+            guard let self = self else { return }
+            
+            if let pixelBuffer = frame.pixelBuffer {
+                self.pipController.enqueueFrame(pixelBuffer)
             }
         }
     }
     
-    /// Update PiP source when streams change
+    /// Update PiP source when streams change (REMOTE/VIEWER mode only)
+    ///
+    /// This function finds the appropriate remote video stream and view, then calls
+    /// attachToDevice() to set up the Video Call API for viewer PiP.
+    ///
+    /// Called when:
+    /// - PiP is enabled with sourceView = .remote
+    /// - A remote participant adds video streams
+    /// - ExpoIVSRemoteStreamView starts rendering a stream
     @available(iOS 15.0, *)
     func updatePiPSourceIfNeeded() {
         guard pipController.isEnabled, _pipOptions.sourceView == .remote else { return }
