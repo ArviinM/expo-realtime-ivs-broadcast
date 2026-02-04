@@ -103,9 +103,17 @@ class ExpoIVSRemoteStreamView: ExpoView {
             print("✅ [REMOTE VIEW] Manager commanded me to render URN: \(deviceUrn)")
             
             // Notify the stage manager that a stream started rendering (for PiP)
-            // Use a small delay to ensure the view is fully set up
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
-                self?.stageManager?.notifyRemoteStreamRendered()
+            // Use a longer delay to ensure the view hierarchy is fully set up
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+                guard let self = self else { return }
+                print("✅ [REMOTE VIEW] Notifying PiP system - view in window: \(self.window != nil), isRenderingVideo: \(self.isRenderingVideo)")
+                self.stageManager?.notifyRemoteStreamRendered()
+            }
+            
+            // Also notify immediately for faster setup if view is already ready
+            if self.window != nil {
+                print("✅ [REMOTE VIEW] View already in window, notifying PiP immediately")
+                self.stageManager?.notifyRemoteStreamRendered()
             }
         } catch {
             print("❌ [REMOTE VIEW] Failed to create preview for URN \(deviceUrn): \(error)")

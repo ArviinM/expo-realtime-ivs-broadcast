@@ -1057,24 +1057,27 @@ class IVSStageManager: NSObject, IVSStageStreamDelegate, IVSStageStrategy, IVSSt
                 let previewView = try device.previewView()
                 pipController.setupWithSourceView(previewView)
                 pipTargetView = previewView
+                print("🖼️ [PiP] Set up with device preview view")
             } catch {
                 print("🖼️ [PiP] Warning: Could not get preview view from device: \(error)")
                 // Try to find a remote view that's rendering this device
                 if let remoteView = remoteViews.compactMap({ $0.value }).first(where: { $0.currentRenderedDeviceUrn == device.descriptor().urn }) {
                     // Always set up with the remote view container - it's the visible video view
                     pipController.setupWithSourceView(remoteView as UIView)
-                    // Use the inner preview view if available, otherwise use the container
                     pipTargetView = remoteView.previewViewForPiP ?? remoteView
-                    print("🖼️ [PiP] Set up with remote view container")
+                    print("🖼️ [PiP] Set up with matching remote view container")
+                } else if let anyRenderingView = remoteViews.compactMap({ $0.value }).first(where: { $0.isRenderingVideo }) {
+                    // Fallback: use any view that's rendering
+                    pipController.setupWithSourceView(anyRenderingView as UIView)
+                    pipTargetView = anyRenderingView.previewViewForPiP ?? anyRenderingView
+                    print("🖼️ [PiP] Set up with fallback rendering view")
+                } else if let anyView = remoteViews.compactMap({ $0.value }).first {
+                    // Last resort: use any registered view
+                    pipController.setupWithSourceView(anyView as UIView)
+                    pipTargetView = anyView
+                    print("🖼️ [PiP] Set up with any available view (last resort)")
                 } else {
-                    // Last resort: try to find ANY registered remote view that's rendering video
-                    if let anyRemoteView = remoteViews.compactMap({ $0.value }).first(where: { $0.isRenderingVideo }) {
-                        pipController.setupWithSourceView(anyRemoteView as UIView)
-                        pipTargetView = anyRemoteView.previewViewForPiP ?? anyRemoteView
-                        print("🖼️ [PiP] Set up with fallback remote view")
-                    } else {
-                        print("🖼️ [PiP] ERROR: No source view found for PiP - controller will not be initialized!")
-                    }
+                    print("🖼️ [PiP] ERROR: No source view found for PiP - controller will NOT be initialized!")
                 }
             }
         }
@@ -1122,26 +1125,43 @@ class IVSStageManager: NSObject, IVSStageStreamDelegate, IVSStageStrategy, IVSSt
             if currentPiPSourceDeviceUrn != imageDevice.descriptor().urn {
                 print("🖼️ [PiP] Found new remote video stream: \(imageDevice.descriptor().urn)")
                 
+                // Debug: Log all registered remote views and their URNs
+                print("🖼️ [PiP] Registered remote views: \(remoteViews.count)")
+                for (index, viewWrapper) in remoteViews.enumerated() {
+                    if let view = viewWrapper.value {
+                        print("🖼️ [PiP]   View \(index): URN=\(view.currentRenderedDeviceUrn ?? "nil"), isRendering=\(view.isRenderingVideo)")
+                    }
+                }
+                
                 // Try to find the remote view that's rendering this stream
                 if let remoteView = remoteViews.compactMap({ $0.value }).first(where: { $0.currentRenderedDeviceUrn == imageDevice.descriptor().urn }) {
-                    // Use the remote view (container) as the source view for Video Call API
-                    // Cast to UIView explicitly since ExpoIVSRemoteStreamView extends ExpoView -> UIView
                     candidateSourceView = remoteView as UIView
                     print("🖼️ [PiP] Found matching remote view for source")
                 } else {
-                    // Fallback: use any remote view that's rendering video
+                    // Fallback: Use ANY remote view that's rendering video
                     if let anyRenderingView = remoteViews.compactMap({ $0.value }).first(where: { $0.isRenderingVideo }) {
                         candidateSourceView = anyRenderingView as UIView
-                        print("🖼️ [PiP] Using fallback remote view for source (URN mismatch)")
+                        print("🖼️ [PiP] Using fallback remote view (URN didn't match but view is rendering)")
+                    } else if let anyView = remoteViews.compactMap({ $0.value }).first {
+                        // Last resort: use any registered view
+                        candidateSourceView = anyView as UIView
+                        print("🖼️ [PiP] Using any available remote view as last resort")
                     }
                 }
                 
                 attachToDevice(imageDevice, sourceView: candidateSourceView)
             }
         } else {
-            // No candidate stream found
+            // No candidate stream found - log why
             if currentPiPDevice == nil {
                 print("🖼️ [PiP] No active remote video stream found yet")
+                print("🖼️ [PiP]   Total participants: \(participants.count)")
+                for p in participants {
+                    print("🖼️ [PiP]   Participant \(p.info.participantId ?? "nil"): \(p.streams.count) streams")
+                    for s in p.streams {
+                        print("🖼️ [PiP]     Stream type: \(s.device.descriptor().type.rawValue), URN: \(s.device.descriptor().urn)")
+                    }
+                }
             }
         }
     }
