@@ -50,6 +50,49 @@ export interface ParticipantStreamsRemovedPayload {
         deviceUrn: string;
     }[];
 }
+/**
+ * Options for configuring Picture-in-Picture behavior
+ */
+export interface PiPOptions {
+    /**
+     * Whether to automatically enter PiP when the app goes to background
+     * @default true
+     */
+    autoEnterOnBackground?: boolean;
+    /**
+     * Which video stream to show in PiP
+     * - 'local': Shows the local camera preview (for broadcasters)
+     * - 'remote': Shows the remote participant stream (for viewers)
+     * @default 'remote'
+     */
+    sourceView?: 'local' | 'remote';
+    /**
+     * Preferred aspect ratio for the PiP window
+     * @default { width: 9, height: 16 } (portrait)
+     */
+    preferredAspectRatio?: {
+        width: number;
+        height: number;
+    };
+}
+/**
+ * PiP state change event payload
+ */
+export interface PiPStateChangedPayload {
+    /**
+     * Current PiP state:
+     * - 'started': PiP mode has started
+     * - 'stopped': PiP mode has stopped
+     * - 'restored': User tapped to return from PiP to full screen
+     */
+    state: 'started' | 'stopped' | 'restored';
+}
+/**
+ * PiP error event payload
+ */
+export interface PiPErrorPayload {
+    error: string;
+}
 export type ExpoRealtimeIvsBroadcastModuleEvents = {
     onStageConnectionStateChanged: (payload: StageConnectionStatePayload) => void;
     onPublishStateChanged: (payload: PublishStatePayload) => void;
@@ -60,6 +103,8 @@ export type ExpoRealtimeIvsBroadcastModuleEvents = {
     onParticipantStreamsRemoved: (payload: ParticipantStreamsRemovedPayload) => void;
     onCameraSwapped: (payload: CameraSwappedPayload) => void;
     onCameraSwapError: (payload: CameraSwapErrorPayload) => void;
+    onPiPStateChanged: (payload: PiPStateChangedPayload) => void;
+    onPiPError: (payload: PiPErrorPayload) => void;
 };
 export type ExpoIVSStagePreviewViewProps = {
     style?: StyleProp<ViewStyle>;

@@ -58,7 +58,7 @@ PODS:
     - ReactCommon/turbomodule/core
     - ReactNativeDependencies
     - Yoga
-  - ExpoRealtimeIvsBroadcast (0.1.4):
+  - ExpoRealtimeIvsBroadcast (0.1.10):
     - AmazonIVSBroadcast/Stages (~> 1.36.0)
     - ExpoModulesCore
   - FBLazyVector (0.81.5)
@@ -1940,7 +1940,7 @@ SPEC CHECKSUMS:
   ExpoFont: 35ac6191ed86bbf56b3ebd2d9154eda9fad5b509
   ExpoKeepAwake: 55f75eca6499bb9e4231ebad6f3e9cb8f99c0296
   ExpoModulesCore: f3da4f1ab5a8375d0beafab763739dbee8446583
-  ExpoRealtimeIvsBroadcast: 7e7a72cbb32e6268c6d2a2ca82141a8ffb19b3c1
+  ExpoRealtimeIvsBroadcast: 7874df289e5cf276ec38bbfabe5c9ad69367abaf
   FBLazyVector: e95a291ad2dadb88e42b06e0c5fb8262de53ec12
   hermes-engine: 9f4dfe93326146a1c99eb535b1cb0b857a3cd172
   RCTDeprecation: 943572d4be82d480a48f4884f670135ae30bf990

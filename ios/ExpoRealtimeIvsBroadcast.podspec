@@ -25,5 +25,6 @@ Pod::Spec.new do |s|
     'DEFINES_MODULE' => 'YES',
   }
 
-  s.source_files = "ExpoRealtimeIvsBroadcastModule.swift", "IVSStageManager.swift", "ExpoIVSStagePreviewView.swift", "ExpoIVSRemoteStreamView.swift"
+  # Include all Swift files in the ios directory
+  s.source_files = "**/*.swift"
 end

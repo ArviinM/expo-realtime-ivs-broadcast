@@ -12,6 +12,9 @@ import {
     ParticipantPayload,
     ParticipantStreamsPayload,
     ParticipantStreamsRemovedPayload,
+    PiPOptions,
+    PiPStateChangedPayload,
+    PiPErrorPayload,
 } from './ExpoRealtimeIvsBroadcast.types';
 
 // Re-export all type definitions
@@ -110,4 +113,95 @@ export function addOnParticipantStreamsRemovedListener(
   listener: (event: ParticipantStreamsRemovedPayload) => void
 ): EventSubscription {
   return ExpoRealtimeIvsBroadcastModule.addListener('onParticipantStreamsRemoved', listener);
+}
+
+// --- Picture-in-Picture Methods ---
+
+/**
+ * Enable Picture-in-Picture mode with the given options.
+ * 
+ * @param options Configuration options for PiP behavior
+ * @returns Promise resolving to true if PiP was enabled successfully
+ * 
+ * @platform iOS 15.0+, Android 8.0+ (API 26+)
+ * 
+ * @remarks
+ * - iOS: Requires `UIBackgroundModes` with `audio` in Info.plist for background playback
+ * - Android: The consuming app must add `android:supportsPictureInPicture="true"` to their Activity
+ */
+export async function enablePictureInPicture(options?: PiPOptions): Promise<boolean> {
+  return await ExpoRealtimeIvsBroadcastModule.enablePictureInPicture(options);
+}
+
+/**
+ * Disable Picture-in-Picture mode and clean up resources.
+ */
+export async function disablePictureInPicture(): Promise<void> {
+  return await ExpoRealtimeIvsBroadcastModule.disablePictureInPicture();
+}
+
+/**
+ * Manually start Picture-in-Picture mode.
+ * PiP must be enabled first via `enablePictureInPicture()`.
+ */
+export async function startPictureInPicture(): Promise<void> {
+  return await ExpoRealtimeIvsBroadcastModule.startPictureInPicture();
+}
+
+/**
+ * Stop Picture-in-Picture mode and return to full screen.
+ * 
+ * @remarks
+ * On Android, this is a hint to the system - PiP is typically exited by user interaction.
+ */
+export async function stopPictureInPicture(): Promise<void> {
+  return await ExpoRealtimeIvsBroadcastModule.stopPictureInPicture();
+}
+
+/**
+ * Check if Picture-in-Picture is currently active.
+ * 
+ * @returns Promise resolving to true if PiP is currently active
+ */
+export async function isPictureInPictureActive(): Promise<boolean> {
+  return await ExpoRealtimeIvsBroadcastModule.isPictureInPictureActive();
+}
+
+/**
+ * Check if Picture-in-Picture is supported on this device.
+ * 
+ * @returns Promise resolving to true if PiP is supported
+ * 
+ * @remarks
+ * - iOS: Requires iOS 15.0+
+ * - Android: Requires Android 8.0+ (API 26+) and device/activity support
+ */
+export async function isPictureInPictureSupported(): Promise<boolean> {
+  return await ExpoRealtimeIvsBroadcastModule.isPictureInPictureSupported();
+}
+
+// --- PiP Event Listeners ---
+
+/**
+ * Add a listener for PiP state changes.
+ * 
+ * @param listener Callback function receiving state: 'started' | 'stopped' | 'restored'
+ * @returns EventSubscription to remove the listener
+ */
+export function addOnPiPStateChangedListener(
+  listener: (event: PiPStateChangedPayload) => void
+): EventSubscription {
+  return ExpoRealtimeIvsBroadcastModule.addListener('onPiPStateChanged', listener);
+}
+
+/**
+ * Add a listener for PiP errors.
+ * 
+ * @param listener Callback function receiving error message
+ * @returns EventSubscription to remove the listener
+ */
+export function addOnPiPErrorListener(
+  listener: (event: PiPErrorPayload) => void
+): EventSubscription {
+  return ExpoRealtimeIvsBroadcastModule.addListener('onPiPError', listener);
 }

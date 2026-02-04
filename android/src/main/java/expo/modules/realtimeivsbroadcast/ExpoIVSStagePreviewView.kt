@@ -33,11 +33,38 @@ class ExpoIVSStagePreviewView(context: Context, appContext: AppContext) : ExpoVi
     // Track view attachment state
     @Volatile
     private var isViewAttached = false
+    
+    // PiP registration flag
+    private var isRegisteredForPiP = false
 
     init {
         Log.i("ExpoIVSStagePreviewView", "Initializing Stage Preview View...")
         // Note: We don't start initialization here because isViewAttached is false
         // The initialization will happen in onAttachedToWindow when the view is ready
+    }
+    
+    /**
+     * Register this view as the PiP source view (for local/broadcaster mode)
+     */
+    private fun registerForPiP() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !isRegisteredForPiP) {
+            val pipManager = PictureInPictureManager.getInstance()
+            pipManager.setSourceView(this)
+            isRegisteredForPiP = true
+            Log.i("ExpoIVSStagePreviewView", "📺 Registered as PiP source view (local)")
+        }
+    }
+    
+    /**
+     * Unregister this view from PiP
+     */
+    private fun unregisterFromPiP() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && isRegisteredForPiP) {
+            val pipManager = PictureInPictureManager.getInstance()
+            pipManager.setSourceView(null)
+            isRegisteredForPiP = false
+            Log.i("ExpoIVSStagePreviewView", "📺 Unregistered from PiP source view")
+        }
     }
     
     // Override onLayout to ensure child views are properly sized
@@ -278,6 +305,9 @@ class ExpoIVSStagePreviewView(context: Context, appContext: AppContext) : ExpoVi
             Log.i("ExpoIVSStagePreviewView", "✅ Successfully attached camera preview for: ${cameraDevice.descriptor.friendlyName}")
             Log.i("ExpoIVSStagePreviewView", "📷 Preview dimensions: ${newPreview.width}x${newPreview.height}, visibility: ${newPreview.visibility}")
             Log.i("ExpoIVSStagePreviewView", "📷 Parent dimensions: ${this.width}x${this.height}, childCount: ${this.childCount}")
+            
+            // Register as PiP source view for broadcaster mode
+            registerForPiP()
         } catch (e: Exception) {
             Log.e("ExpoIVSStagePreviewView", "❌ Failed to attach camera preview: ${e.message}", e)
             this.ivsImagePreviewView = null
@@ -425,6 +455,9 @@ class ExpoIVSStagePreviewView(context: Context, appContext: AppContext) : ExpoVi
         
         // Unregister from manager BEFORE touching views
         stageManager?.unregisterPreviewView(this)
+        
+        // Unregister from PiP
+        unregisterFromPiP()
         
         // Capture reference before clearing
         val preview = ivsImagePreviewView

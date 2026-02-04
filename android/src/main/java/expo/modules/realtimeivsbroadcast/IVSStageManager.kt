@@ -245,8 +245,11 @@ class IVSStageManager(private val context: Context) : Stage.Strategy, StageRende
         remoteViews.removeAll { it.get() == null }
         
         // Check if this view is already registered
-        if (remoteViews.any { it.get() === view }) {
-            Log.w("ExpoIVSStageManager", "🧠 [MANAGER] View already registered, skipping...")
+        val existingView = remoteViews.find { it.get() === view }
+        if (existingView != null) {
+            Log.i("ExpoIVSStageManager", "🧠 [MANAGER] View already registered, triggering stream assignment anyway...")
+            // Still call assignStreamsToAvailableViews in case the view needs a stream
+            assignStreamsToAvailableViews()
             return
         }
         
