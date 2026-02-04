@@ -1093,13 +1093,33 @@ class IVSStageManager: NSObject, IVSStageStreamDelegate, IVSStageStrategy, IVSSt
             }
         }
         
-        // Set frame callback to receive CVPixelBuffers (only if not already set on this device)
-        let frameQueue = DispatchQueue(label: "com.ivs.pip.frameCallback", qos: .userInteractive)
-        device.setOnFrameCallbackQueue(frameQueue, includePixelBuffer: true) { [weak self] frame in
-            guard let self = self else { return }
-            
-            if let pixelBuffer = frame.pixelBuffer {
-                self.pipController.enqueueFrame(pixelBuffer)
+        // For remote streams, the device frame callback may not work properly
+        // Use ViewFrameCapture to capture frames from the actual UIView instead
+        if _pipOptions.sourceView == .remote {
+            // Use view capture for remote streams - more reliable than device callback
+            if let targetView = pipTargetView {
+                print("🖼️ [PiP] Using ViewFrameCapture for remote stream")
+                pipController.startViewCapture(from: targetView)
+            } else {
+                print("🖼️ [PiP] Warning: No target view for ViewFrameCapture, trying device callback")
+                // Fallback to device callback
+                let frameQueue = DispatchQueue(label: "com.ivs.pip.frameCallback", qos: .userInteractive)
+                device.setOnFrameCallbackQueue(frameQueue, includePixelBuffer: true) { [weak self] frame in
+                    guard let self = self else { return }
+                    if let pixelBuffer = frame.pixelBuffer {
+                        self.pipController.enqueueFrame(pixelBuffer)
+                    }
+                }
+            }
+        } else {
+            // For local streams (broadcaster), use device frame callback
+            print("🖼️ [PiP] Using device frame callback for local stream")
+            let frameQueue = DispatchQueue(label: "com.ivs.pip.frameCallback", qos: .userInteractive)
+            device.setOnFrameCallbackQueue(frameQueue, includePixelBuffer: true) { [weak self] frame in
+                guard let self = self else { return }
+                if let pixelBuffer = frame.pixelBuffer {
+                    self.pipController.enqueueFrame(pixelBuffer)
+                }
             }
         }
     }
