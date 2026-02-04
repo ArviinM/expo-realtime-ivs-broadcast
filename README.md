@@ -8,7 +8,8 @@ This module provides React Native components and a comprehensive API to integrat
 
 | Library Version | Expo SDK | React Native | React   | Notes |
 |-----------------|----------|--------------|---------|-------|
-| 0.2.0           | 54       | 0.81.x       | 19.1.x  | **Added Picture-in-Picture support** |
+| 0.2.1           | 54       | 0.81.x       | 19.1.x  | **Fixed iOS PiP pre-warming reliability** |
+| 0.2.0           | 54       | 0.81.x       | 19.1.x  | Added Picture-in-Picture support |
 | 0.1.7           | 54       | 0.81.x       | 19.1.x  | |
 | 0.1.4           | 53       | 0.79.x       | 19.0.x  | |
 
