@@ -4,6 +4,14 @@
 
 This module provides React Native components and a comprehensive API to integrate [Amazon IVS Real-Time Streaming](https://docs.aws.amazon.com/ivs/latest/RealTimeUserGuide/what-is.html) into your Expo application. It acts as a wrapper around the native Amazon IVS Broadcast SDK for both iOS and Android, allowing you to both publish your own camera/microphone and subscribe to remote participants' streams.
 
+## Compatibility
+
+| Library Version | Expo SDK | React Native | React   | Notes |
+|-----------------|----------|--------------|---------|-------|
+| 0.2.0           | 54       | 0.81.x       | 19.1.x  | **Added Picture-in-Picture support** |
+| 0.1.7           | 54       | 0.81.x       | 19.1.x  | |
+| 0.1.4           | 53       | 0.79.x       | 19.0.x  | |
+
 ## Installation
 
 Install the package in your Expo project:
@@ -27,6 +35,23 @@ Open your `ios/<Your-Project-Name>/Info.plist` and add the following keys:
 <string>Allow $(PRODUCT_NAME) to use your microphone to broadcast audio.</string>
 ```
 
+#### Picture-in-Picture (iOS)
+
+To enable Picture-in-Picture support for background video playback, add the background modes:
+
+```xml
+<key>UIBackgroundModes</key>
+<array>
+    <string>audio</string>
+    <string>voip</string>
+</array>
+```
+
+**Notes:**
+- PiP requires iOS 15.0 or later.
+- The `voip` mode is recommended for broadcaster PiP to maintain better background performance.
+- When the app is backgrounded, the camera may be paused by iOS. In this case, a "LIVE - Broadcasting in progress" placeholder will be displayed in the PiP window to indicate that the broadcast is still active.
+
 After adding the permissions, you may need to prebuild your project: `npx expo prebuild --platform ios`.
 
 ### Android
@@ -34,6 +59,25 @@ After adding the permissions, you may need to prebuild your project: `npx expo p
 The necessary permissions (`CAMERA`, `RECORD_AUDIO`, `INTERNET`) are already included in the library's `AndroidManifest.xml` and will be merged into your app's manifest automatically during the build process.
 
 However, you are still responsible for requesting these permissions from the user at runtime before attempting to initialize local devices. This is standard Android behavior.
+
+#### Picture-in-Picture (Android)
+
+To enable Picture-in-Picture support, you must configure your Activity. Add the following to your main Activity in `android/app/src/main/AndroidManifest.xml`:
+
+```xml
+<activity
+    android:name=".MainActivity"
+    android:supportsPictureInPicture="true"
+    android:configChanges="screenSize|smallestScreenSize|screenLayout|orientation"
+    ... >
+</activity>
+```
+
+**Notes:**
+- PiP requires Android 8.0 (API 26) or later.
+- On Android 12+, `autoEnterOnBackground` enables automatic PiP entry via `setAutoEnterEnabled()`.
+- Android PiP is Activity-level, meaning the entire app UI shrinks into the PiP window (unlike iOS which shows only the video).
+- The video stream view is automatically set as the source rect hint for smooth PiP transitions.
 
 ## Core Concepts
 
@@ -116,6 +160,25 @@ All methods are asynchronous and return a `Promise`.
 -   `setMicrophoneMuted(muted)`: Mutes or unmutes the local microphone. Requires `initializeLocalStreams` to have been called.
 -   `requestPermissions()`: Checks and returns the current status of camera and microphone permissions without prompting the user.
 
+#### Picture-in-Picture Methods
+
+These methods allow you to implement Picture-in-Picture functionality for continuous video playback when the app is in the background. PiP works for both **viewers** (watching a remote stream) and **broadcasters** (showing their own camera preview).
+
+-   `enablePictureInPicture(options?)`: Enables PiP mode with optional configuration.
+    -   `options.autoEnterOnBackground` (`boolean`, default: `true`): Automatically enter PiP when app goes to background.
+    -   `options.sourceView` (`'local' | 'remote'`, default: `'remote'`): Which video stream to show in PiP.
+        - Use `'remote'` for viewers watching a livestream.
+        - Use `'local'` for broadcasters to see their own camera in PiP.
+    -   `options.preferredAspectRatio` (`{ width: number, height: number }`): Preferred aspect ratio for the PiP window.
+    -   Returns: `Promise<boolean>` - `true` if PiP was enabled successfully.
+-   `disablePictureInPicture()`: Disables PiP mode and cleans up resources.
+-   `startPictureInPicture()`: Manually starts PiP mode (must be enabled first).
+-   `stopPictureInPicture()`: Stops PiP mode and returns to full screen.
+-   `isPictureInPictureActive()`: Returns `true` if PiP is currently active.
+-   `isPictureInPictureSupported()`: Returns `true` if PiP is supported on the device.
+
+**Broadcaster PiP Behavior (iOS):** When using `sourceView: 'local'` for broadcasters, iOS may pause the camera when the app enters the background. In this case, the PiP window will automatically display a "LIVE - Broadcasting in progress" placeholder to reassure the broadcaster that their stream is still active. The camera preview will resume when the app returns to the foreground.
+
 ### Event Listeners
 
 You can subscribe to events from the native module. Each listener function returns an `EventSubscription` object with a `remove()` method to unsubscribe.
@@ -129,6 +192,207 @@ You can subscribe to events from the native module. Each listener function retur
 -   `addOnParticipantLeftListener(listener)`: Fired when a remote participant leaves the stage.
 -   `addOnParticipantStreamsAddedListener(listener)`: Fired when a remote participant adds streams.
 -   `addOnParticipantStreamsRemovedListener(listener)`: Fired when a remote participant removes streams.
+-   `addOnPiPStateChangedListener(listener)`: Fired when PiP state changes.
+    -   Payload: `{ state: 'started' | 'stopped' | 'restored' }`
+-   `addOnPiPErrorListener(listener)`: Fired when a PiP error occurs.
+    -   Payload: `{ error: string }`
+
+## Picture-in-Picture Examples
+
+### Viewer PiP Example
+
+This example demonstrates how to use PiP for a live shopping viewer experience:
+
+```tsx
+import React, { useEffect, useState } from 'react';
+import { View, Button, StyleSheet, Text } from 'react-native';
+import {
+  ExpoIVSRemoteStreamView,
+  enablePictureInPicture,
+  disablePictureInPicture,
+  startPictureInPicture,
+  isPictureInPictureSupported,
+  addOnPiPStateChangedListener,
+  addOnPiPErrorListener,
+} from 'expo-realtime-ivs-broadcast';
+
+export default function LiveShoppingViewer() {
+  const [isPiPSupported, setIsPiPSupported] = useState(false);
+  const [isPiPActive, setIsPiPActive] = useState(false);
+
+  useEffect(() => {
+    // Check if PiP is supported
+    isPictureInPictureSupported().then(setIsPiPSupported);
+
+    // Listen for PiP state changes
+    const stateSub = addOnPiPStateChangedListener((event) => {
+      console.log('PiP state:', event.state);
+      setIsPiPActive(event.state === 'started');
+      
+      if (event.state === 'restored') {
+        // User tapped to return from PiP
+        console.log('User returned from PiP');
+      }
+    });
+
+    const errorSub = addOnPiPErrorListener((event) => {
+      console.error('PiP error:', event.error);
+    });
+
+    return () => {
+      stateSub.remove();
+      errorSub.remove();
+      disablePictureInPicture();
+    };
+  }, []);
+
+  const handleEnablePiP = async () => {
+    const success = await enablePictureInPicture({
+      autoEnterOnBackground: true,    // Auto-enter when user presses home
+      sourceView: 'remote',           // Show the livestream in PiP
+      preferredAspectRatio: { width: 9, height: 16 },  // Portrait
+    });
+    
+    if (success) {
+      console.log('PiP enabled! Stream will continue in background.');
+    }
+  };
+
+  const handleManualPiP = () => {
+    // Manually trigger PiP (useful for a "minimize" button)
+    startPictureInPicture();
+  };
+
+  return (
+    <View style={styles.container}>
+      <ExpoIVSRemoteStreamView style={styles.video} scaleMode="fill" />
+      
+      <View style={styles.controls}>
+        {isPiPSupported && (
+          <>
+            <Button title="Enable PiP" onPress={handleEnablePiP} />
+            <Button title="Minimize to PiP" onPress={handleManualPiP} />
+          </>
+        )}
+        {!isPiPSupported && (
+          <Text style={styles.text}>PiP not supported on this device</Text>
+        )}
+      </View>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: '#000' },
+  video: { flex: 1 },
+  controls: { padding: 20, flexDirection: 'row', justifyContent: 'space-evenly' },
+  text: { color: '#888' },
+});
+```
+
+### Broadcaster PiP Example
+
+This example demonstrates how to use PiP for a broadcaster/seller experience, allowing them to see themselves while the app is in the background:
+
+```tsx
+import React, { useEffect, useState } from 'react';
+import { View, Button, StyleSheet, Text } from 'react-native';
+import {
+  ExpoIVSStagePreviewView,
+  enablePictureInPicture,
+  disablePictureInPicture,
+  startPictureInPicture,
+  isPictureInPictureSupported,
+  addOnPiPStateChangedListener,
+  initializeLocalStreams,
+  joinStage,
+  setStreamsPublished,
+} from 'expo-realtime-ivs-broadcast';
+
+export default function BroadcasterScreen() {
+  const [isPiPSupported, setIsPiPSupported] = useState(false);
+  const [isLive, setIsLive] = useState(false);
+
+  useEffect(() => {
+    isPictureInPictureSupported().then(setIsPiPSupported);
+
+    const stateSub = addOnPiPStateChangedListener((event) => {
+      console.log('PiP state:', event.state);
+      
+      if (event.state === 'restored') {
+        // Broadcaster returned from PiP to full screen
+        console.log('Returned to app from PiP');
+      }
+    });
+
+    return () => {
+      stateSub.remove();
+      disablePictureInPicture();
+    };
+  }, []);
+
+  const handleGoLive = async () => {
+    await initializeLocalStreams();
+    await joinStage('YOUR_BROADCASTER_TOKEN');
+    await setStreamsPublished(true);
+    setIsLive(true);
+
+    // Enable PiP with local camera view for broadcaster
+    if (isPiPSupported) {
+      await enablePictureInPicture({
+        autoEnterOnBackground: true,
+        sourceView: 'local',  // Show broadcaster's own camera in PiP
+        preferredAspectRatio: { width: 9, height: 16 },
+      });
+    }
+  };
+
+  const handleMinimize = () => {
+    // Manually enter PiP (e.g., when switching to another app feature)
+    startPictureInPicture();
+  };
+
+  return (
+    <View style={styles.container}>
+      <ExpoIVSStagePreviewView style={styles.preview} mirror={true} />
+      
+      <View style={styles.controls}>
+        {!isLive ? (
+          <Button title="Go Live" onPress={handleGoLive} />
+        ) : (
+          <>
+            <Text style={styles.liveIndicator}>● LIVE</Text>
+            {isPiPSupported && (
+              <Button title="Minimize" onPress={handleMinimize} />
+            )}
+          </>
+        )}
+      </View>
+      
+      {isPiPSupported && isLive && (
+        <Text style={styles.hint}>
+          Swipe up to go home - you'll see yourself in PiP while broadcasting
+        </Text>
+      )}
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: '#000' },
+  preview: { flex: 1 },
+  controls: { 
+    padding: 20, 
+    flexDirection: 'row', 
+    justifyContent: 'space-evenly',
+    alignItems: 'center',
+  },
+  liveIndicator: { color: 'red', fontSize: 18, fontWeight: 'bold' },
+  hint: { color: '#666', textAlign: 'center', padding: 10, fontSize: 12 },
+});
+```
+
+**Note:** When the broadcaster backgrounds the app, iOS may pause camera access. The PiP window will automatically show a "LIVE - Broadcasting in progress" placeholder. The actual broadcast continues uninterrupted - only the local preview is paused.
 
 ## Usage Example
 

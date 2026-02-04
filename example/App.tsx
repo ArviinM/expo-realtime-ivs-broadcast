@@ -36,6 +36,17 @@ import {
   addOnCameraSwapErrorListener,
   CameraSwappedPayload,
   CameraSwapErrorPayload,
+  // PiP imports
+  enablePictureInPicture,
+  disablePictureInPicture,
+  startPictureInPicture,
+  stopPictureInPicture,
+  isPictureInPictureActive,
+  isPictureInPictureSupported,
+  addOnPiPStateChangedListener,
+  addOnPiPErrorListener,
+  PiPStateChangedPayload,
+  PiPErrorPayload,
 } from 'expo-realtime-ivs-broadcast';
 
 const { width } = Dimensions.get('window');
@@ -56,6 +67,16 @@ export default function App() {
   const [permissionStatus, setPermissionStatus] = useState<PermissionStatusMap | null>(null);
   const [lastSwapResult, setLastSwapResult] = useState<string | null>(null);
   const [localStreamsInitialized, setLocalStreamsInitialized] = useState(false);
+  
+  // PiP state
+  const [isPiPSupported, setIsPiPSupported] = useState<boolean>(false);
+  const [isPiPEnabled, setIsPiPEnabled] = useState<boolean>(false);
+  const [isPiPActive, setIsPiPActive] = useState<boolean>(false);
+  const [pipState, setPipState] = useState<string>('none');
+  const [pipError, setPipError] = useState<string | null>(null);
+  
+  // Android PiP mode - hide UI to show only video
+  const [isInPiPMode, setIsInPiPMode] = useState<boolean>(false);
 
   // Use the new hook to get participant data
   const { participants } = useStageParticipants();
@@ -95,9 +116,33 @@ export default function App() {
       console.error('onCameraSwapError', data);
       setLastSwapResult(`Error: ${data.reason}`);
     });
+
+    // PiP event listeners
+    const pipStateSub = addOnPiPStateChangedListener((data) => {
+      console.log('onPiPStateChanged', data);
+      setPipState(data.state);
+      setIsPiPActive(data.state === 'started');
+      
+      // On Android, hide UI when entering PiP to show only video
+      if (Platform.OS === 'android') {
+        if (data.state === 'started') {
+          setIsInPiPMode(true);
+        } else if (data.state === 'stopped' || data.state === 'restored') {
+          setIsInPiPMode(false);
+        }
+      }
+    });
+
+    const pipErrorSub = addOnPiPErrorListener((data) => {
+      console.error('onPiPError', data);
+      setPipError(data.error);
+    });
     
     // Call the stage configuration initializer on mount for everyone
     handleInitializeStage();
+    
+    // Check PiP support
+    checkPiPSupport();
 
     return () => {
       connectionSub.remove();
@@ -105,6 +150,9 @@ export default function App() {
       errorSub.remove();
       cameraSwapSub.remove();
       cameraSwapErrorSub.remove();
+      pipStateSub.remove();
+      pipErrorSub.remove();
+      disablePictureInPicture(); // Cleanup PiP
       handleLeaveStage(); // Leave stage on unmount
     };
   }, []);
@@ -201,6 +249,75 @@ export default function App() {
   const toggleMirror = () => setMirrorView(prev => !prev);
   const toggleScaleMode = () => setScaleMode(prev => prev === 'fill' ? 'fit' : 'fill');
 
+  // PiP handlers
+  const checkPiPSupport = async () => {
+    try {
+      const supported = await isPictureInPictureSupported();
+      setIsPiPSupported(supported);
+      console.log('PiP supported:', supported);
+    } catch (e) {
+      console.error('Check PiP support error:', e);
+    }
+  };
+
+  const handleEnablePiP = async () => {
+    try {
+      setPipError(null);
+      // Use 'local' for publisher (camera preview), 'remote' for viewer (remote stream)
+      const sourceView = role === 'publisher' ? 'local' : 'remote';
+      const success = await enablePictureInPicture({
+        autoEnterOnBackground: true,
+        sourceView,
+        preferredAspectRatio: { width: 9, height: 16 },
+      });
+      setIsPiPEnabled(success);
+      console.log('PiP enabled:', success);
+    } catch (e) {
+      console.error('Enable PiP error:', e);
+    }
+  };
+
+  const handleDisablePiP = async () => {
+    try {
+      await disablePictureInPicture();
+      setIsPiPEnabled(false);
+      setIsPiPActive(false);
+      setPipState('none');
+      console.log('PiP disabled');
+    } catch (e) {
+      console.error('Disable PiP error:', e);
+    }
+  };
+
+  const handleStartPiP = async () => {
+    try {
+      setPipError(null);
+      await startPictureInPicture();
+      console.log('PiP start requested');
+    } catch (e) {
+      console.error('Start PiP error:', e);
+    }
+  };
+
+  const handleStopPiP = async () => {
+    try {
+      await stopPictureInPicture();
+      console.log('PiP stop requested');
+    } catch (e) {
+      console.error('Stop PiP error:', e);
+    }
+  };
+
+  const handleCheckPiPActive = async () => {
+    try {
+      const active = await isPictureInPictureActive();
+      setIsPiPActive(active);
+      console.log('PiP active:', active);
+    } catch (e) {
+      console.error('Check PiP active error:', e);
+    }
+  };
+
   const renderRoleSelection = () => (
     <View style={styles.centered}>
       <Text style={styles.header}>Choose Your Role</Text>
@@ -211,7 +328,49 @@ export default function App() {
     </View>
   );
 
-  const renderSessionUI = () => (
+  // Render PiP-only mode (Android) - fullscreen video only
+  const renderPiPModeUI = () => {
+    // For publisher, show local preview; for viewer, show remote stream
+    if (role === 'publisher' && localStreamsInitialized) {
+      return (
+        <View style={styles.pipFullscreenContainer}>
+          <ExpoIVSStagePreviewView 
+            style={styles.pipFullscreenVideo} 
+            mirror={mirrorView}
+            scaleMode="fill"
+          />
+        </View>
+      );
+    }
+    
+    // For viewer, show first remote video stream
+    const firstVideoParticipant = participants.find(p => 
+      p.streams.some(s => s.mediaType === 'video')
+    );
+    
+    if (firstVideoParticipant) {
+      return (
+        <View style={styles.pipFullscreenContainer}>
+          <ExpoIVSRemoteStreamView style={styles.pipFullscreenVideo} />
+        </View>
+      );
+    }
+    
+    // Fallback: show placeholder
+    return (
+      <View style={[styles.pipFullscreenContainer, styles.pipPlaceholder]}>
+        <Text style={styles.pipPlaceholderText}>Waiting for video...</Text>
+      </View>
+    );
+  };
+
+  const renderSessionUI = () => {
+    // On Android, when in PiP mode, show only the video fullscreen
+    if (isInPiPMode && Platform.OS === 'android') {
+      return renderPiPModeUI();
+    }
+    
+    return (
     <ScrollView contentContainerStyle={styles.scrollContentContainer}>
         <Text style={styles.header}>IVS Real-Time Demo ({role})</Text>
 
@@ -231,6 +390,14 @@ export default function App() {
                     <Button title={mirrorView ? "Unmirror" : "Mirror"} onPress={toggleMirror} />
                     <Button title={`Scale: ${scaleMode}`} onPress={toggleScaleMode} />
                 </View>
+                <View style={styles.controlsRow}>
+                    <TouchableOpacity style={styles.flipButton} onPress={handleSwapCamera}>
+                      <Text style={styles.flipButtonText}>🔄 FLIP CAMERA</Text>
+                    </TouchableOpacity>
+                </View>
+                {lastSwapResult && (
+                  <Text style={styles.swapStatus}>Last swap: {lastSwapResult}</Text>
+                )}
               </>
             ) : (
               <Button title="Start Camera & Mic (Go Live)" onPress={handleInitializeLocalStreams} />
@@ -279,7 +446,7 @@ export default function App() {
           {role === 'publisher' && (
              <View style={styles.controlsRow}>
                <Button title={isPublished ? 'Unpublish' : 'Publish'} onPress={handleTogglePublish} disabled={!localStreamsInitialized || connectionState?.state !== 'connected'} />
-               <Button title="Swap Cam" onPress={handleSwapCamera} disabled={!localStreamsInitialized} />
+               <Button title="Swap Cam" onPress={handleSwapCamera} />
                <Button title={isMuted ? 'Unmute' : 'Mute'} onPress={handleToggleMute} disabled={!localStreamsInitialized} />
              </View>
           )}
@@ -294,8 +461,62 @@ export default function App() {
           <Text>Last Swap: {lastSwapResult ?? 'N/A'}</Text>
           {lastError && <Text style={{ color: 'red' }}>Error: {lastError.description}</Text>}
         </View>
+
+        {/* PiP Controls */}
+        <View style={styles.group}>
+          <Text style={styles.groupHeader}>Picture-in-Picture</Text>
+          <Text style={styles.pipStatus}>PiP Supported: {isPiPSupported ? '✅ Yes' : '❌ No'}</Text>
+          <Text style={styles.pipStatus}>PiP Enabled: {isPiPEnabled ? '✅ Yes' : '❌ No'}</Text>
+          <Text style={styles.pipStatus}>PiP Active: {isPiPActive ? '✅ Yes' : '❌ No'}</Text>
+          <Text style={styles.pipStatus}>PiP State: {pipState}</Text>
+          {pipError && <Text style={styles.pipError}>PiP Error: {pipError}</Text>}
+          
+          <View style={styles.controlsRow}>
+            {!isPiPEnabled ? (
+              <TouchableOpacity 
+                style={[styles.pipButton, !isPiPSupported && styles.pipButtonDisabled]} 
+                onPress={handleEnablePiP}
+                disabled={!isPiPSupported}
+              >
+                <Text style={styles.pipButtonText}>Enable PiP</Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity 
+                style={[styles.pipButton, styles.pipButtonDanger]} 
+                onPress={handleDisablePiP}
+              >
+                <Text style={styles.pipButtonText}>Disable PiP</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+          
+          {isPiPEnabled && (
+            <View style={styles.controlsRow}>
+              <TouchableOpacity 
+                style={[styles.pipButton, isPiPActive && styles.pipButtonDisabled]} 
+                onPress={handleStartPiP}
+                disabled={isPiPActive}
+              >
+                <Text style={styles.pipButtonText}>Start PiP</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={[styles.pipButton, !isPiPActive && styles.pipButtonDisabled]} 
+                onPress={handleStopPiP}
+                disabled={!isPiPActive}
+              >
+                <Text style={styles.pipButtonText}>Stop PiP</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+          
+          <Text style={styles.pipHint}>
+            💡 Tip: {role === 'publisher' ? 'Local camera' : 'Remote stream'} will be shown in PiP.
+            {'\n'}Press Home button to test auto-enter PiP!
+          </Text>
+        </View>
       </ScrollView>
-  );
+    );
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -394,5 +615,87 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-around',
     marginBottom: 10,
+  },
+  flipButton: {
+    backgroundColor: '#007AFF',
+    paddingHorizontal: 30,
+    paddingVertical: 15,
+    borderRadius: 10,
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+  },
+  flipButtonText: {
+    color: 'white',
+    fontSize: 18,
+    fontWeight: 'bold',
+    textAlign: 'center',
+  },
+  swapStatus: {
+    textAlign: 'center',
+    marginTop: 5,
+    fontSize: 12,
+    color: '#666',
+  },
+  // PiP styles
+  pipStatus: {
+    fontSize: 14,
+    marginBottom: 4,
+  },
+  pipError: {
+    color: 'red',
+    fontSize: 12,
+    marginBottom: 8,
+  },
+  pipButton: {
+    backgroundColor: '#5856D6',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 8,
+    marginHorizontal: 5,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+  },
+  pipButtonDisabled: {
+    backgroundColor: '#ccc',
+  },
+  pipButtonDanger: {
+    backgroundColor: '#FF3B30',
+  },
+  pipButtonText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  pipHint: {
+    fontSize: 12,
+    color: '#666',
+    textAlign: 'center',
+    marginTop: 10,
+    fontStyle: 'italic',
+  },
+  // Android PiP fullscreen mode styles
+  pipFullscreenContainer: {
+    flex: 1,
+    backgroundColor: '#000',
+  },
+  pipFullscreenVideo: {
+    flex: 1,
+    width: '100%',
+    height: '100%',
+  },
+  pipPlaceholder: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  pipPlaceholderText: {
+    color: '#fff',
+    fontSize: 16,
   },
 });

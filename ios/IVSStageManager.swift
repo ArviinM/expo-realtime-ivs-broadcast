@@ -1,9 +1,16 @@
 import ExpoModulesCore
 import AmazonIVSBroadcast
 import AVFoundation // For AVAudioSession
+import AVKit
 
 extension Notification.Name {
     static let remoteStreamAvailable = Notification.Name("remoteStreamAvailableNotification")
+}
+
+// MARK: - PiP Frame Source Protocol
+protocol PiPFrameSource: AnyObject {
+    func didReceiveFrame(_ pixelBuffer: CVPixelBuffer)
+    func didReceiveSampleBuffer(_ sampleBuffer: CMSampleBuffer)
 }
 
 // MARK: - Custom Camera Capture Manager
@@ -19,6 +26,9 @@ class CustomCameraCapture: NSObject, AVCaptureVideoDataOutputSampleBufferDelegat
     var customImageSource: IVSCustomImageSource?
     var currentPosition: AVCaptureDevice.Position = .front
     var previewLayer: AVCaptureVideoPreviewLayer?
+    
+    // PiP frame source delegate
+    weak var pipFrameSource: PiPFrameSource?
     
     // Available cameras discovered via AVFoundation
     private(set) var availableCameras: [AVCaptureDevice] = []
@@ -92,6 +102,17 @@ class CustomCameraCapture: NSObject, AVCaptureVideoDataOutputSampleBufferDelegat
         if captureSession == nil {
             captureSession = AVCaptureSession()
             captureSession?.sessionPreset = .hd1280x720
+            
+            // iOS 16+: Enable multitasking camera access for PiP support
+            // This allows camera to continue running when app is in PiP mode
+            if #available(iOS 16.0, *) {
+                if captureSession?.isMultitaskingCameraAccessSupported == true {
+                    captureSession?.isMultitaskingCameraAccessEnabled = true
+                    print("📸 [CustomCameraCapture] ✅ Multitasking camera access enabled (iOS 16+)")
+                } else {
+                    print("📸 [CustomCameraCapture] ⚠️ Multitasking camera access not supported on this device")
+                }
+            }
         }
         
         guard let session = captureSession else { return false }
@@ -203,9 +224,22 @@ class CustomCameraCapture: NSObject, AVCaptureVideoDataOutputSampleBufferDelegat
     
     // MARK: - AVCaptureVideoDataOutputSampleBufferDelegate
     
+    private var captureFrameCount: Int = 0
+    
     func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
+        captureFrameCount += 1
+        
+        // Log periodically to track if capture is running
+        if captureFrameCount == 1 || captureFrameCount % 300 == 0 {
+            let isBackground = UIApplication.shared.applicationState == .background
+            print("📸 [CustomCameraCapture] Frame #\(captureFrameCount), background: \(isBackground), hasPiPDelegate: \(pipFrameSource != nil)")
+        }
+        
         // Feed the sample buffer to IVS custom image source
         customImageSource?.onSampleBuffer(sampleBuffer)
+        
+        // Forward to PiP if enabled
+        pipFrameSource?.didReceiveSampleBuffer(sampleBuffer)
     }
     
     func captureOutput(_ output: AVCaptureOutput, didDrop sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
@@ -259,6 +293,27 @@ class IVSStageManager: NSObject, IVSStageStreamDelegate, IVSStageStrategy, IVSSt
     private var remoteViews: [Weak<ExpoIVSRemoteStreamView>] = []
     // The specific participant we should prioritize rendering.
     private var targetParticipantId: String?
+    
+    // MARK: - Picture-in-Picture Properties
+    
+    private var _pipController: AnyObject?
+    private var _pipOptions: PiPOptions = PiPOptions()
+    private var currentPiPSourceDeviceUrn: String?
+    private weak var pipTargetView: UIView?
+    // Store the current IVSImageDevice being used for PiP frame capture
+    private var currentPiPDevice: IVSImageDevice?
+    // Store the local preview view for broadcaster PiP
+    private weak var localPreviewView: UIView?
+    
+    @available(iOS 15.0, *)
+    private var pipController: IVSPictureInPictureController {
+        if _pipController == nil {
+            let controller = IVSPictureInPictureController()
+            controller.delegate = self
+            _pipController = controller
+        }
+        return _pipController as! IVSPictureInPictureController
+    }
 
     // MARK: - Initialization
 
@@ -774,6 +829,313 @@ class IVSStageManager: NSObject, IVSStageStreamDelegate, IVSStageStrategy, IVSSt
         print("Microphone muted: \(muted)")
     }
     
+    // MARK: - Picture-in-Picture Public API
+    
+    /// Enable PiP with the given options
+    @available(iOS 15.0, *)
+    func enablePictureInPicture(options: [String: Any]?) {
+        var pipOpts = PiPOptions()
+        
+        if let autoEnter = options?["autoEnterOnBackground"] as? Bool {
+            pipOpts.autoEnterOnBackground = autoEnter
+        }
+        
+        if let sourceView = options?["sourceView"] as? String {
+            pipOpts.sourceView = sourceView == "local" ? .local : .remote
+        }
+        
+        if let aspectRatio = options?["preferredAspectRatio"] as? [String: Any],
+           let width = aspectRatio["width"] as? CGFloat,
+           let height = aspectRatio["height"] as? CGFloat {
+            pipOpts.preferredAspectRatio = CGSize(width: width, height: height)
+        }
+        
+        self._pipOptions = pipOpts
+        
+        let success = pipController.enable(options: pipOpts)
+        
+        if success {
+            // Setup frame forwarding based on source view
+            setupPiPFrameCapture()
+        }
+    }
+    
+    /// Disable PiP
+    @available(iOS 15.0, *)
+    func disablePictureInPicture() {
+        pipController.disable()
+        cleanupPiPFrameCapture()
+    }
+    
+    /// Start PiP manually
+    @available(iOS 15.0, *)
+    func startPictureInPicture() {
+        pipController.start()
+    }
+    
+    /// Stop PiP manually
+    @available(iOS 15.0, *)
+    func stopPictureInPicture() {
+        pipController.stop()
+    }
+    
+    /// Check if PiP is currently active
+    @available(iOS 15.0, *)
+    func isPictureInPictureActive() -> Bool {
+        return pipController.isActive
+    }
+    
+    /// Check if PiP is enabled
+    @available(iOS 15.0, *)
+    func isPictureInPictureEnabled() -> Bool {
+        return pipController.isEnabled
+    }
+    
+    /// Set the target view for PiP (used for remote stream capture)
+    @available(iOS 15.0, *)
+    func setPiPTargetView(_ view: UIView?) {
+        self.pipTargetView = view
+        
+        if let view = view, pipController.isEnabled, _pipOptions.sourceView == .remote {
+            // Start view capture for remote stream
+            pipController.startViewCapture(from: view)
+            print("🖼️ [PiP] Set target view for remote stream capture")
+        }
+    }
+    
+    /// Register the local preview view (ExpoIVSStagePreviewView) for broadcaster PiP
+    /// This should be called when the local preview view is set up
+    func registerLocalPreviewView(_ view: UIView?) {
+        self.localPreviewView = view
+        print("🖼️ [PiP] Registered local preview view: \(view != nil ? "set" : "cleared")")
+        
+        // If PiP is already enabled for local source, set up the frame capture now
+        if #available(iOS 15.0, *) {
+            if pipController.isEnabled, _pipOptions.sourceView == .local, let view = view {
+                setupLocalCameraPiP(sourceView: view)
+            }
+        }
+    }
+    
+    // MARK: - PiP Frame Capture Setup
+    
+    @available(iOS 15.0, *)
+    private func setupPiPFrameCapture() {
+        if _pipOptions.sourceView == .local {
+            // For local camera (broadcaster mode)
+            if let sourceView = localPreviewView {
+                setupLocalCameraPiP(sourceView: sourceView)
+            } else {
+                print("🖼️ [PiP] Warning: Local preview view not registered yet. PiP will be set up when view is registered.")
+            }
+        } else {
+            // For remote streams, use IVSImageDevice frame callback
+            updatePiPSourceIfNeeded()
+        }
+    }
+    
+    /// Set up PiP for local camera with the given source view
+    @available(iOS 15.0, *)
+    private func setupLocalCameraPiP(sourceView: UIView) {
+        print("🖼️ [PiP] Setting up local camera PiP with source view")
+        
+        // First, set up the Video Call API source view
+        pipController.setupWithSourceView(sourceView)
+        pipTargetView = sourceView
+        
+        // IMPORTANT: Always use IVSImageDevice frame callback from the camera stream
+        // This works better in background than relying on AVCaptureSession delegate
+        // because the IVS SDK manages the frame pipeline internally
+        guard let stream = cameraStream, let imageDevice = stream.device as? IVSImageDevice else {
+            print("🖼️ [PiP] Warning: Camera stream not available for PiP frame callback")
+            
+            // Fallback to AVCaptureSession delegate for custom capture only
+            if useCustomCameraCapture {
+                customCameraCapture?.pipFrameSource = self
+                print("🖼️ [PiP] Using fallback: AVCaptureSession delegate (may freeze in background)")
+            }
+            return
+        }
+        
+        // Use IVSImageDevice frame callback - this works for both native IVS camera
+        // and custom capture (where the device is IVSCustomImageSource)
+        setupFrameCallbackOnDevice(imageDevice)
+        
+        let deviceType = useCustomCameraCapture ? "IVSCustomImageSource" : "native IVS camera"
+        print("🖼️ [PiP] Setup local camera frame capture via IVSImageDevice (\(deviceType))")
+    }
+    
+    /// Set up frame callback on an IVSImageDevice without changing the source view
+    @available(iOS 15.0, *)
+    private func setupFrameCallbackOnDevice(_ device: IVSImageDevice) {
+        // If we are already attached to this device, do nothing
+        if currentPiPDevice === device {
+            print("🖼️ [PiP] Already attached to this device, skipping")
+            return
+        }
+        
+        // If attached to another device, detach first
+        if let oldDevice = currentPiPDevice {
+            oldDevice.setOnFrameCallback(nil)
+            print("🖼️ [PiP] Detached from previous device")
+        }
+        
+        currentPiPDevice = device
+        currentPiPSourceDeviceUrn = device.descriptor().urn
+        
+        print("🖼️ [PiP] Setting up frame callback on device: \(device.descriptor().urn)")
+        
+        // Set frame callback to receive CVPixelBuffers
+        // Use a dedicated queue for frame processing
+        let frameQueue = DispatchQueue(label: "com.ivs.pip.frameCallback", qos: .userInteractive)
+        
+        // Track frame count for debugging
+        var deviceFrameCount = 0
+        
+        device.setOnFrameCallbackQueue(frameQueue, includePixelBuffer: true) { [weak self] frame in
+            guard let self = self else { return }
+            
+            deviceFrameCount += 1
+            
+            // Log periodically to track if frames are coming
+            if deviceFrameCount == 1 || deviceFrameCount % 150 == 0 { // Log every 5 seconds at 30fps
+                let isBackground = UIApplication.shared.applicationState == .background
+                print("🖼️ [PiP] IVSImageDevice frame #\(deviceFrameCount), background: \(isBackground), hasPixelBuffer: \(frame.pixelBuffer != nil)")
+            }
+            
+            if let pixelBuffer = frame.pixelBuffer {
+                self.pipController.enqueueFrame(pixelBuffer)
+            }
+        }
+        
+        print("🖼️ [PiP] Frame callback registered on device")
+    }
+    
+    @available(iOS 15.0, *)
+    private func cleanupPiPFrameCapture() {
+        // Clear custom camera capture delegate
+        customCameraCapture?.pipFrameSource = nil
+        
+        // Clear IVS device callback
+        if let device = currentPiPDevice {
+            // Remove the callback
+            device.setOnFrameCallback(nil)
+            print("🖼️ [PiP] Removed frame callback from device: \(device.descriptor().urn)")
+        }
+        
+        currentPiPDevice = nil
+        currentPiPSourceDeviceUrn = nil
+        pipTargetView = nil
+    }
+    
+    /// Attach frame callback to an IVS Image Device
+    @available(iOS 15.0, *)
+    private func attachToDevice(_ device: IVSImageDevice, sourceView: UIView? = nil) {
+        // If we are already attached to this device, do nothing
+        if currentPiPDevice === device {
+            return
+        }
+        
+        // If attached to another device, detach first
+        if let oldDevice = currentPiPDevice {
+            oldDevice.setOnFrameCallback(nil)
+        }
+        
+        currentPiPDevice = device
+        currentPiPSourceDeviceUrn = device.descriptor().urn
+        
+        print("🖼️ [PiP] Attaching frame callback to device: \(device.descriptor().urn)")
+        
+        // IMPORTANT: Set up the Video Call API source view
+        // This is required for the PiP window to appear correctly
+        if let view = sourceView {
+            pipController.setupWithSourceView(view)
+            pipTargetView = view
+        } else {
+            // Try to get a preview view from the device
+            do {
+                let previewView = try device.previewView()
+                pipController.setupWithSourceView(previewView)
+                pipTargetView = previewView
+            } catch {
+                print("🖼️ [PiP] Warning: Could not get preview view from device: \(error)")
+                // Try to find a remote view that's rendering this device
+                if let remoteView = remoteViews.compactMap({ $0.value }).first(where: { $0.currentRenderedDeviceUrn == device.descriptor().urn }),
+                   let previewViewForPiP = remoteView.previewViewForPiP {
+                    pipController.setupWithSourceView(remoteView as UIView)
+                    pipTargetView = previewViewForPiP
+                }
+            }
+        }
+        
+        // Set frame callback to receive CVPixelBuffers
+        // Using a dedicated queue for better performance
+        let frameQueue = DispatchQueue(label: "com.ivs.pip.frameCallback", qos: .userInteractive)
+        device.setOnFrameCallbackQueue(frameQueue, includePixelBuffer: true) { [weak self] frame in
+            guard let self = self else { return }
+            
+            if let pixelBuffer = frame.pixelBuffer {
+                self.pipController.enqueueFrame(pixelBuffer)
+            }
+        }
+    }
+    
+    /// Update PiP source when streams change
+    @available(iOS 15.0, *)
+    func updatePiPSourceIfNeeded() {
+        guard pipController.isEnabled, _pipOptions.sourceView == .remote else { return }
+        
+        // We prioritize the target participant if set, otherwise any remote video
+        var candidateStream: IVSStageStream?
+        var candidateSourceView: UIView?
+        
+        // Strategy: Find the first available video stream from a remote participant
+        // 1. If targetParticipantId is set, check them first
+        if let targetId = self.targetParticipantId,
+           let participant = self.participants.first(where: { $0.info.participantId == targetId }) {
+            candidateStream = participant.streams.first(where: { $0.device.descriptor().type == IVSDeviceType(rawValue: 5) }) // 5 = Video
+        }
+        
+        // 2. If no target or no stream, check all participants
+        if candidateStream == nil {
+            for participant in self.participants {
+                if let stream = participant.streams.first(where: { $0.device.descriptor().type == IVSDeviceType(rawValue: 5) }) {
+                    candidateStream = stream
+                    break
+                }
+            }
+        }
+        
+        if let stream = candidateStream, let imageDevice = stream.device as? IVSImageDevice {
+            // Found a valid video stream, attach to it
+            if currentPiPSourceDeviceUrn != imageDevice.descriptor().urn {
+                print("🖼️ [PiP] Found new remote video stream: \(imageDevice.descriptor().urn)")
+                
+                // Try to find the remote view that's rendering this stream
+                if let remoteView = remoteViews.compactMap({ $0.value }).first(where: { $0.currentRenderedDeviceUrn == imageDevice.descriptor().urn }) {
+                    // Use the remote view (container) as the source view for Video Call API
+                    // Cast to UIView explicitly since ExpoIVSRemoteStreamView extends ExpoView -> UIView
+                    candidateSourceView = remoteView as UIView
+                    print("🖼️ [PiP] Found matching remote view for source")
+                }
+                
+                attachToDevice(imageDevice, sourceView: candidateSourceView)
+            }
+        } else {
+            // No candidate stream found
+            if currentPiPDevice == nil {
+                print("🖼️ [PiP] No active remote video stream found yet")
+            }
+        }
+    }
+    
+    /// Called by ExpoIVSRemoteStreamView when a stream finishes rendering
+    func notifyRemoteStreamRendered() {
+        if #available(iOS 15.0, *) {
+            updatePiPSourceIfNeeded()
+        }
+    }
+    
     // Public getter for the camera stream so the View can access it
     public func getCameraStream() -> IVSLocalStageStream? {
         return self.cameraStream
@@ -1066,6 +1428,11 @@ extension IVSStageManager {
         if streams.contains(where: { $0.device.descriptor().type == IVSDeviceType(rawValue: 5) }) {
             print("🧠 [MANAGER] Assigning streams to available views. didAddStreams")
             self.assignStreamsToAvailableViews()
+            
+            // Update PiP source if needed
+            if #available(iOS 15.0, *) {
+                updatePiPSourceIfNeeded()
+            }
         }
         
         delegate?.stageManagerDidEmitEvent(eventName: "onParticipantStreamsAdded", body: body)
@@ -1102,8 +1469,11 @@ extension IVSStageManager {
             "participantId": participant.participantId ?? "",
             "streams": streamDicts
         ]
-
         
+        // Update PiP source if the removed stream was being used
+        if #available(iOS 15.0, *) {
+            updatePiPSourceIfNeeded()
+        }
 
         delegate?.stageManagerDidEmitEvent(eventName: "onParticipantStreamsRemoved", body: body)
     }
@@ -1135,3 +1505,51 @@ class Weak<T: AnyObject> {
     self.value = value
   }
 }
+
+// MARK: - PiPFrameSource Implementation
+extension IVSStageManager: PiPFrameSource {
+    private static var frameReceivedCount: Int = 0
+    
+    func didReceiveFrame(_ pixelBuffer: CVPixelBuffer) {
+        if #available(iOS 15.0, *) {
+            IVSStageManager.frameReceivedCount += 1
+            // Log periodically to confirm frames are flowing
+            if IVSStageManager.frameReceivedCount == 1 || IVSStageManager.frameReceivedCount % 300 == 0 {
+                print("🖼️ [PiP] Received pixel buffer frame #\(IVSStageManager.frameReceivedCount)")
+            }
+            pipController.enqueueFrame(pixelBuffer)
+        }
+    }
+    
+    func didReceiveSampleBuffer(_ sampleBuffer: CMSampleBuffer) {
+        if #available(iOS 15.0, *) {
+            IVSStageManager.frameReceivedCount += 1
+            // Log periodically to confirm frames are flowing
+            if IVSStageManager.frameReceivedCount == 1 || IVSStageManager.frameReceivedCount % 300 == 0 {
+                print("🖼️ [PiP] Received sample buffer frame #\(IVSStageManager.frameReceivedCount)")
+            }
+            pipController.enqueueSampleBuffer(sampleBuffer)
+        }
+    }
+}
+
+// MARK: - IVSPictureInPictureControllerDelegate Implementation
+@available(iOS 15.0, *)
+extension IVSStageManager: IVSPictureInPictureControllerDelegate {
+    func pictureInPictureDidStart() {
+        delegate?.stageManagerDidEmitEvent(eventName: "onPiPStateChanged", body: ["state": "started"])
+    }
+    
+    func pictureInPictureDidStop() {
+        delegate?.stageManagerDidEmitEvent(eventName: "onPiPStateChanged", body: ["state": "stopped"])
+    }
+    
+    func pictureInPictureWillRestore() {
+        delegate?.stageManagerDidEmitEvent(eventName: "onPiPStateChanged", body: ["state": "restored"])
+    }
+    
+    func pictureInPictureDidFail(with error: String) {
+        delegate?.stageManagerDidEmitEvent(eventName: "onPiPError", body: ["error": error])
+    }
+}
+

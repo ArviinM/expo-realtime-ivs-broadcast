@@ -15,6 +15,17 @@ class ExpoIVSRemoteStreamView: ExpoView {
     var scaleMode: String = "fill" {
         didSet { updateScaleMode() }
     }
+    
+    /// Returns the actual IVS preview view for PiP capture
+    /// This is the view that actually displays the video content
+    public var previewViewForPiP: UIView? {
+        return ivsImagePreviewView
+    }
+    
+    /// Returns whether this view is currently rendering video
+    public var isRenderingVideo: Bool {
+        return ivsImagePreviewView != nil && currentRenderedDeviceUrn != nil
+    }
 
     // MARK: - Initializers
 
@@ -90,6 +101,12 @@ class ExpoIVSRemoteStreamView: ExpoView {
 
             updateScaleMode()
             print("✅ [REMOTE VIEW] Manager commanded me to render URN: \(deviceUrn)")
+            
+            // Notify the stage manager that a stream started rendering (for PiP)
+            // Use a small delay to ensure the view is fully set up
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+                self?.stageManager?.notifyRemoteStreamRendered()
+            }
         } catch {
             print("❌ [REMOTE VIEW] Failed to create preview for URN \(deviceUrn): \(error)")
         }
