@@ -28,6 +28,21 @@ export async function swapCamera() {
 export async function setMicrophoneMuted(muted) {
     return await ExpoRealtimeIvsBroadcastModule.setMicrophoneMuted(muted);
 }
+/**
+ * Mute or unmute the camera.
+ * When muted, a placeholder frame with text is sent instead of camera video.
+ * @param muted - Whether to mute the camera
+ * @param placeholderText - Optional text to show on placeholder (default: "Host is away")
+ */
+export async function setCameraMuted(muted, placeholderText) {
+    return await ExpoRealtimeIvsBroadcastModule.setCameraMuted(muted, placeholderText ?? null);
+}
+/**
+ * Check if the camera is currently muted
+ */
+export async function isCameraMuted() {
+    return await ExpoRealtimeIvsBroadcastModule.isCameraMuted();
+}
 export async function requestPermissions() {
     return await ExpoRealtimeIvsBroadcastModule.requestPermissions();
 }
@@ -46,6 +61,9 @@ export function addOnCameraSwappedListener(listener) {
 }
 export function addOnCameraSwapErrorListener(listener) {
     return ExpoRealtimeIvsBroadcastModule.addListener('onCameraSwapError', listener);
+}
+export function addOnCameraMuteStateChangedListener(listener) {
+    return ExpoRealtimeIvsBroadcastModule.addListener('onCameraMuteStateChanged', listener);
 }
 export function addOnParticipantJoinedListener(listener) {
     return ExpoRealtimeIvsBroadcastModule.addListener('onParticipantJoined', listener);

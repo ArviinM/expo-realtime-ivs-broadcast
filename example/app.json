@@ -3,6 +3,7 @@
     "name": "expo-realtime-ivs-broadcast-example",
     "slug": "expo-realtime-ivs-broadcast-example",
     "version": "1.0.0",
+    "scheme": "ivs-broadcast-example",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -14,7 +15,12 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "expo.modules.realtimeivsbroadcast.example"
+      "bundleIdentifier": "expo.modules.realtimeivsbroadcast.example",
+      "infoPlist": {
+        "UIBackgroundModes": ["audio", "voip"],
+        "NSCameraUsageDescription": "This app needs access to your camera to broadcast live video.",
+        "NSMicrophoneUsageDescription": "This app needs access to your microphone to broadcast live audio."
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -22,10 +28,30 @@
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "package": "expo.modules.realtimeivsbroadcast.example"
+      "package": "expo.modules.realtimeivsbroadcast.example",
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_CAMERA",
+        "android.permission.FOREGROUND_SERVICE_MICROPHONE"
+      ]
     },
     "web": {
-      "favicon": "./assets/favicon.png"
-    }
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "enablePictureInPicture": true
+          }
+        }
+      ]
+    ]
   }
 }

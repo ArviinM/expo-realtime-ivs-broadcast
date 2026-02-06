@@ -29,6 +29,10 @@ export interface CameraSwappedPayload {
 export interface CameraSwapErrorPayload {
     reason: string;
 }
+export interface CameraMuteStatePayload {
+    muted: boolean;
+    placeholderActive: boolean;
+}
 export interface StageStream {
     deviceUrn: string;
     mediaType: 'video' | 'audio' | 'unknown';
@@ -103,6 +107,7 @@ export type ExpoRealtimeIvsBroadcastModuleEvents = {
     onParticipantStreamsRemoved: (payload: ParticipantStreamsRemovedPayload) => void;
     onCameraSwapped: (payload: CameraSwappedPayload) => void;
     onCameraSwapError: (payload: CameraSwapErrorPayload) => void;
+    onCameraMuteStateChanged: (payload: CameraMuteStatePayload) => void;
     onPiPStateChanged: (payload: PiPStateChangedPayload) => void;
     onPiPError: (payload: PiPErrorPayload) => void;
 };

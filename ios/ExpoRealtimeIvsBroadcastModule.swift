@@ -16,7 +16,7 @@ public class ExpoRealtimeIvsBroadcastModule: Module, IVSStageManagerDelegate {
     // The module will be accessible from `requireNativeModule('ExpoRealtimeIvsBroadcast')` in JavaScript.
     Name("ExpoRealtimeIvsBroadcast")
     // Defines event names that the module can send to JavaScript.
-    Events("onStageConnectionStateChanged", "onPublishStateChanged", "onStageError", "onCameraSwapped", "onCameraSwapError", "onParticipantJoined", "onParticipantLeft", "onParticipantStreamsAdded", "onParticipantStreamsRemoved", "onPiPStateChanged", "onPiPError")
+    Events("onStageConnectionStateChanged", "onPublishStateChanged", "onStageError", "onCameraSwapped", "onCameraSwapError", "onParticipantJoined", "onParticipantLeft", "onParticipantStreamsAdded", "onParticipantStreamsRemoved", "onPiPStateChanged", "onPiPError", "onCameraMuteStateChanged")
 
     // Initialize the IVSStageManager when the module is created
     // and set self as its delegate.
@@ -56,6 +56,14 @@ public class ExpoRealtimeIvsBroadcastModule: Module, IVSStageManagerDelegate {
 
     AsyncFunction("setMicrophoneMuted") { (muted: Bool) in
       self.ivsStageManager?.setMicrophoneMuted(muted: muted)
+    }
+    
+    AsyncFunction("setCameraMuted") { (muted: Bool, placeholderText: String?) in
+      self.ivsStageManager?.setCameraMuted(muted: muted, placeholderText: placeholderText)
+    }
+    
+    AsyncFunction("isCameraMuted") { () -> Bool in
+      return self.ivsStageManager?.isCameraMuted() ?? false
     }
 
     AsyncFunction("requestPermissions") { (promise: Promise) in

@@ -56,6 +56,23 @@ export async function setMicrophoneMuted(muted: boolean): Promise<void> {
   return await ExpoRealtimeIvsBroadcastModule.setMicrophoneMuted(muted);
 }
 
+/**
+ * Mute or unmute the camera.
+ * When muted, a placeholder frame with text is sent instead of camera video.
+ * @param muted - Whether to mute the camera
+ * @param placeholderText - Optional text to show on placeholder (default: "Host is away")
+ */
+export async function setCameraMuted(muted: boolean, placeholderText?: string): Promise<void> {
+  return await ExpoRealtimeIvsBroadcastModule.setCameraMuted(muted, placeholderText ?? null);
+}
+
+/**
+ * Check if the camera is currently muted
+ */
+export async function isCameraMuted(): Promise<boolean> {
+  return await ExpoRealtimeIvsBroadcastModule.isCameraMuted();
+}
+
 export async function requestPermissions(): Promise<PermissionStatusMap> {
   return await ExpoRealtimeIvsBroadcastModule.requestPermissions();
 }
@@ -89,6 +106,12 @@ export function addOnCameraSwapErrorListener(
   listener: (event: CameraSwapErrorPayload) => void
 ): EventSubscription {
   return ExpoRealtimeIvsBroadcastModule.addListener('onCameraSwapError', listener);
+}
+
+export function addOnCameraMuteStateChangedListener(
+  listener: (event: { muted: boolean; placeholderActive: boolean }) => void
+): EventSubscription {
+  return ExpoRealtimeIvsBroadcastModule.addListener('onCameraMuteStateChanged', listener);
 }
 
 export function addOnParticipantJoinedListener(

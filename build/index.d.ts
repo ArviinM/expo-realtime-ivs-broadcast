@@ -13,12 +13,27 @@ export declare function leaveStage(): Promise<void>;
 export declare function setStreamsPublished(published: boolean): Promise<void>;
 export declare function swapCamera(): Promise<void>;
 export declare function setMicrophoneMuted(muted: boolean): Promise<void>;
+/**
+ * Mute or unmute the camera.
+ * When muted, a placeholder frame with text is sent instead of camera video.
+ * @param muted - Whether to mute the camera
+ * @param placeholderText - Optional text to show on placeholder (default: "Host is away")
+ */
+export declare function setCameraMuted(muted: boolean, placeholderText?: string): Promise<void>;
+/**
+ * Check if the camera is currently muted
+ */
+export declare function isCameraMuted(): Promise<boolean>;
 export declare function requestPermissions(): Promise<PermissionStatusMap>;
 export declare function addOnStageConnectionStateChangedListener(listener: (event: StageConnectionStatePayload) => void): EventSubscription;
 export declare function addOnPublishStateChangedListener(listener: (event: PublishStatePayload) => void): EventSubscription;
 export declare function addOnStageErrorListener(listener: (event: StageErrorPayload) => void): EventSubscription;
 export declare function addOnCameraSwappedListener(listener: (event: CameraSwappedPayload) => void): EventSubscription;
 export declare function addOnCameraSwapErrorListener(listener: (event: CameraSwapErrorPayload) => void): EventSubscription;
+export declare function addOnCameraMuteStateChangedListener(listener: (event: {
+    muted: boolean;
+    placeholderActive: boolean;
+}) => void): EventSubscription;
 export declare function addOnParticipantJoinedListener(listener: (event: ParticipantPayload) => void): EventSubscription;
 export declare function addOnParticipantLeftListener(listener: (event: ParticipantPayload) => void): EventSubscription;
 export declare function addOnParticipantStreamsAddedListener(listener: (event: ParticipantStreamsPayload) => void): EventSubscription;

@@ -33,5 +33,10 @@ yarn-error.*
 # local env files
 .env*.local
 
+# Local development files (not committed)
+.local/
+*.local.md
+TEST_SCENARIOS.md
+
 # typescript
 *.tsbuildinfo

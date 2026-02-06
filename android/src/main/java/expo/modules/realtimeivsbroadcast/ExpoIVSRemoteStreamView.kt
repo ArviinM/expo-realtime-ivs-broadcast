@@ -293,19 +293,37 @@ class ExpoIVSRemoteStreamView(context: Context, appContext: AppContext) : ExpoVi
             resolveStageManagerWithRetry()
         } else {
             // Already have manager - re-register to get stream assigned
-            // This handles the case when returning from PiP mode
+            // This handles the case when returning from navigation or PiP mode
             Log.d("ExpoIVSRemoteStreamView", "Re-registering with existing manager")
             stageManager?.registerRemoteView(this)
+            
+            // If no stream was assigned immediately, retry after a short delay
+            // This handles timing issues when view re-attaches after navigation
+            if (currentRenderedDeviceUrn == null) {
+                mainHandler.postDelayed({
+                    if (currentRenderedDeviceUrn == null && stageManager != null) {
+                        Log.d("ExpoIVSRemoteStreamView", "Delayed retry: re-registering for stream assignment")
+                        stageManager?.registerRemoteView(this)
+                    }
+                }, 100)
+            }
         }
     }
 
     override fun onDetachedFromWindow() {
         super.onDetachedFromWindow()
-        Log.d("ExpoIVSRemoteStreamView", "View detached from window")
+        Log.d("ExpoIVSRemoteStreamView", "View detached from window, clearing currentURN: $currentRenderedDeviceUrn")
         // Remove any pending retries
         mainHandler.removeCallbacksAndMessages(null)
+        
+        // Clear the rendered URN BEFORE unregistering so the stream becomes available
+        val urnToClear = currentRenderedDeviceUrn
+        currentRenderedDeviceUrn = null
+        
         stageManager?.unregisterRemoteView(this)
         unregisterFromPiP()
         cleanupStreamView()
+        
+        Log.d("ExpoIVSRemoteStreamView", "View detached cleanup complete, cleared URN: $urnToClear")
     }
 }

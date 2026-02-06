@@ -36,7 +36,10 @@ class ExpoRealtimeIvsBroadcastModule : Module(), IVSStageManagerDelegate, Pictur
             "onPublishStateChanged",
             "onStageError",
             "onPiPStateChanged",
-            "onPiPError"
+            "onPiPError",
+            "onCameraMuteStateChanged",
+            "onCameraSwapped",
+            "onCameraSwapError"
         )
 
         OnCreate {
@@ -94,6 +97,21 @@ class ExpoRealtimeIvsBroadcastModule : Module(), IVSStageManagerDelegate, Pictur
 
         AsyncFunction("setMicrophoneMuted") { muted: Boolean ->
             IVSStageManager.instance?.setMicrophoneMuted(muted)
+        }
+
+        AsyncFunction("setCameraMuted") { muted: Boolean, placeholderText: String? ->
+            // TODO: Implement camera mute with placeholder frames on Android
+            // For now, just emit the event so JS state stays in sync
+            Log.d("ExpoRealtimeIvsBroadcast", "setCameraMuted called: muted=$muted, text=$placeholderText")
+            sendEvent("onCameraMuteStateChanged", mapOf(
+                "muted" to muted,
+                "placeholderActive" to false // Placeholder not implemented on Android yet
+            ))
+        }
+
+        AsyncFunction("isCameraMuted") {
+            // TODO: Implement actual camera mute state tracking on Android
+            return@AsyncFunction false
         }
 
         // --- Picture-in-Picture Methods ---

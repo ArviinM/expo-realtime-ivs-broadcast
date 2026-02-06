@@ -6,6 +6,7 @@ import AVFoundation
 class ExpoIVSStagePreviewView: ExpoView {
     private var ivsImagePreviewView: IVSImagePreviewView?
     private var customPreviewLayer: AVCaptureVideoPreviewLayer?
+    private var pipCompatibilityView: IVSImagePreviewView? // Hidden view for PiP compatibility
     private weak var stageManager: IVSStageManager?
     private var currentPreviewDeviceUrn: String?
     private var isUsingCustomPreview: Bool = false
@@ -108,6 +109,22 @@ class ExpoIVSStagePreviewView: ExpoView {
         // Add to view
         layer.addSublayer(previewLayer)
         
+        // IMPORTANT: For PiP compatibility, also add the IVS preview view
+        // iOS Video Call API needs an IVS-compatible view to recognize video content
+        if let ivsPreview = stageManager?.getCustomImageSourcePreviewView() {
+            ivsPreview.translatesAutoresizingMaskIntoConstraints = false
+            ivsPreview.alpha = 0.01 // Nearly invisible but present for iOS video detection
+            insertSubview(ivsPreview, at: 0) // Behind the preview layer
+            NSLayoutConstraint.activate([
+                ivsPreview.topAnchor.constraint(equalTo: topAnchor),
+                ivsPreview.bottomAnchor.constraint(equalTo: bottomAnchor),
+                ivsPreview.leadingAnchor.constraint(equalTo: leadingAnchor),
+                ivsPreview.trailingAnchor.constraint(equalTo: trailingAnchor)
+            ])
+            self.pipCompatibilityView = ivsPreview
+            print("ExpoIVSStagePreviewView: ✅ Added IVS preview view for PiP compatibility")
+        }
+        
         // Apply mirror if needed
         updateCustomPreviewMirror()
         
@@ -189,6 +206,12 @@ class ExpoIVSStagePreviewView: ExpoView {
         if let oldLayer = self.customPreviewLayer {
             oldLayer.removeFromSuperlayer()
             self.customPreviewLayer = nil
+        }
+        
+        // Remove PiP compatibility view
+        if let pipView = self.pipCompatibilityView {
+            pipView.removeFromSuperview()
+            self.pipCompatibilityView = nil
         }
     }
     
