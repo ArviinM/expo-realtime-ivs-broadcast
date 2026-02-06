@@ -33,6 +33,14 @@ class CustomCameraCapture: NSObject, AVCaptureVideoDataOutputSampleBufferDelegat
     // Available cameras discovered via AVFoundation
     private(set) var availableCameras: [AVCaptureDevice] = []
     
+    // Camera mute state (sends placeholder frames when muted)
+    private(set) var isCameraMuted: Bool = false
+    private var placeholderTimer: Timer?
+    private var placeholderPixelBuffer: CVPixelBuffer?
+    private var placeholderText: String = "Host is away"
+    private let placeholderWidth: Int = 720
+    private let placeholderHeight: Int = 1280
+    
     override init() {
         super.init()
         discoverCameras()
@@ -232,8 +240,11 @@ class CustomCameraCapture: NSObject, AVCaptureVideoDataOutputSampleBufferDelegat
         // Log periodically to track if capture is running
         if captureFrameCount == 1 || captureFrameCount % 300 == 0 {
             let isBackground = UIApplication.shared.applicationState == .background
-            print("📸 [CustomCameraCapture] Frame #\(captureFrameCount), background: \(isBackground), hasPiPDelegate: \(pipFrameSource != nil)")
+            print("📸 [CustomCameraCapture] Frame #\(captureFrameCount), background: \(isBackground), hasPiPDelegate: \(pipFrameSource != nil), muted: \(isCameraMuted)")
         }
+        
+        // When camera is muted, placeholder frames are sent by timer instead
+        guard !isCameraMuted else { return }
         
         // Feed the sample buffer to IVS custom image source
         customImageSource?.onSampleBuffer(sampleBuffer)
@@ -244,6 +255,170 @@ class CustomCameraCapture: NSObject, AVCaptureVideoDataOutputSampleBufferDelegat
     
     func captureOutput(_ output: AVCaptureOutput, didDrop sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
         // Frame dropped - this is normal under heavy load
+    }
+    
+    // MARK: - Camera Mute with Placeholder
+    
+    func setCameraMuted(_ muted: Bool, placeholderText: String? = nil) {
+        guard isCameraMuted != muted else { return }
+        
+        isCameraMuted = muted
+        
+        if let text = placeholderText {
+            self.placeholderText = text
+            // Regenerate placeholder with new text
+            placeholderPixelBuffer = nil
+        }
+        
+        if muted {
+            print("📸 [CustomCameraCapture] Camera MUTED - sending placeholder frames")
+            startPlaceholderFrames()
+        } else {
+            print("📸 [CustomCameraCapture] Camera UNMUTED - resuming camera frames")
+            stopPlaceholderFrames()
+        }
+    }
+    
+    private func startPlaceholderFrames() {
+        stopPlaceholderFrames() // Clean up any existing timer
+        
+        // Generate placeholder if needed
+        if placeholderPixelBuffer == nil {
+            placeholderPixelBuffer = createPlaceholderPixelBuffer()
+        }
+        
+        // Send placeholder frames at 15fps
+        placeholderTimer = Timer.scheduledTimer(withTimeInterval: 1.0/15.0, repeats: true) { [weak self] _ in
+            self?.sendPlaceholderFrame()
+        }
+        
+        // Send one immediately
+        sendPlaceholderFrame()
+    }
+    
+    private func stopPlaceholderFrames() {
+        placeholderTimer?.invalidate()
+        placeholderTimer = nil
+    }
+    
+    private func sendPlaceholderFrame() {
+        guard let pixelBuffer = placeholderPixelBuffer else { return }
+        
+        // Create a CMSampleBuffer from the pixel buffer
+        var timingInfo = CMSampleTimingInfo(
+            duration: CMTime(value: 1, timescale: 15),
+            presentationTimeStamp: CMClockGetTime(CMClockGetHostTimeClock()),
+            decodeTimeStamp: .invalid
+        )
+        
+        var formatDescription: CMFormatDescription?
+        CMVideoFormatDescriptionCreateForImageBuffer(
+            allocator: kCFAllocatorDefault,
+            imageBuffer: pixelBuffer,
+            formatDescriptionOut: &formatDescription
+        )
+        
+        guard let format = formatDescription else { return }
+        
+        var sampleBuffer: CMSampleBuffer?
+        CMSampleBufferCreateReadyWithImageBuffer(
+            allocator: kCFAllocatorDefault,
+            imageBuffer: pixelBuffer,
+            formatDescription: format,
+            sampleTiming: &timingInfo,
+            sampleBufferOut: &sampleBuffer
+        )
+        
+        if let buffer = sampleBuffer {
+            customImageSource?.onSampleBuffer(buffer)
+        }
+    }
+    
+    private func createPlaceholderPixelBuffer() -> CVPixelBuffer? {
+        // Create pixel buffer
+        var pixelBuffer: CVPixelBuffer?
+        let attrs: [String: Any] = [
+            kCVPixelBufferCGImageCompatibilityKey as String: true,
+            kCVPixelBufferCGBitmapContextCompatibilityKey as String: true,
+            kCVPixelBufferIOSurfacePropertiesKey as String: [:]
+        ]
+        
+        let status = CVPixelBufferCreate(
+            kCFAllocatorDefault,
+            placeholderWidth,
+            placeholderHeight,
+            kCVPixelFormatType_32BGRA,
+            attrs as CFDictionary,
+            &pixelBuffer
+        )
+        
+        guard status == kCVReturnSuccess, let buffer = pixelBuffer else {
+            print("📸 [CustomCameraCapture] Failed to create placeholder pixel buffer")
+            return nil
+        }
+        
+        CVPixelBufferLockBaseAddress(buffer, [])
+        defer { CVPixelBufferUnlockBaseAddress(buffer, []) }
+        
+        guard let context = CGContext(
+            data: CVPixelBufferGetBaseAddress(buffer),
+            width: placeholderWidth,
+            height: placeholderHeight,
+            bitsPerComponent: 8,
+            bytesPerRow: CVPixelBufferGetBytesPerRow(buffer),
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue
+        ) else {
+            print("📸 [CustomCameraCapture] Failed to create CGContext for placeholder")
+            return nil
+        }
+        
+        // Fill with dark gray background
+        context.setFillColor(UIColor(red: 0.15, green: 0.15, blue: 0.15, alpha: 1.0).cgColor)
+        context.fill(CGRect(x: 0, y: 0, width: placeholderWidth, height: placeholderHeight))
+        
+        // Draw text
+        let paragraphStyle = NSMutableParagraphStyle()
+        paragraphStyle.alignment = .center
+        
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: UIFont.systemFont(ofSize: 48, weight: .medium),
+            .foregroundColor: UIColor.white,
+            .paragraphStyle: paragraphStyle
+        ]
+        
+        let textSize = (placeholderText as NSString).size(withAttributes: attributes)
+        let textRect = CGRect(
+            x: (CGFloat(placeholderWidth) - textSize.width) / 2,
+            y: (CGFloat(placeholderHeight) - textSize.height) / 2,
+            width: textSize.width,
+            height: textSize.height
+        )
+        
+        // Draw text using UIGraphics (CGContext text drawing is complex)
+        UIGraphicsPushContext(context)
+        // Flip context for text (CGContext has flipped Y)
+        context.saveGState()
+        context.translateBy(x: 0, y: CGFloat(placeholderHeight))
+        context.scaleBy(x: 1, y: -1)
+        (placeholderText as NSString).draw(in: textRect, withAttributes: attributes)
+        context.restoreGState()
+        UIGraphicsPopContext()
+        
+        print("📸 [CustomCameraCapture] Created placeholder frame with text: '\(placeholderText)'")
+        return buffer
+    }
+    
+    func updatePlaceholderText(_ text: String) {
+        placeholderText = text
+        placeholderPixelBuffer = nil // Will be regenerated on next frame
+        if isCameraMuted {
+            placeholderPixelBuffer = createPlaceholderPixelBuffer()
+        }
+    }
+    
+    deinit {
+        stopPlaceholderFrames()
     }
 }
 
@@ -777,34 +952,122 @@ class IVSStageManager: NSObject, IVSStageStreamDelegate, IVSStageStrategy, IVSSt
     func registerRemoteView(_ view: ExpoIVSRemoteStreamView) {
         // Add a weak reference to the view to avoid memory leaks.
         self.remoteViews.append(Weak(view))
-        print("🧠 [MANAGER] A remote view has registered. Total views: \(self.remoteViews.count)")
+        print("📺 [MANAGER] ====== Remote view registered ======")
+        print("📺 [MANAGER] Total view refs: \(self.remoteViews.count)")
+        print("📺 [MANAGER] Participants count: \(self.participants.count)")
+        for p in self.participants {
+            print("📺 [MANAGER]   Participant: \(p.info.participantId ?? "nil"), streams: \(p.streams.count)")
+            for s in p.streams {
+                print("📺 [MANAGER]     Stream URN: \(s.device.descriptor().urn), type: \(s.device.descriptor().type.rawValue)")
+            }
+        }
         
-        // --- THIS IS THE FIX ---
         // A view was just added. It might be the canvas we were waiting for.
         // Immediately try to assign any streams that are waiting in our state.
         self.assignStreamsToAvailableViews()
+        
+        // Also schedule a delayed retry in case streams haven't arrived yet
+        // This handles race conditions where view mounts before stream info
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+            guard let self = self else { return }
+            // Check if the view still exists and needs assignment
+            if view.currentRenderedDeviceUrn == nil && !self.participants.isEmpty {
+                print("📺 [MANAGER] Delayed retry - view still needs stream assignment")
+                self.assignStreamsToAvailableViews()
+            }
+        }
     }
     
     func unregisterRemoteView(_ view: ExpoIVSRemoteStreamView) {
-        // Remove the view if it's destroyed.
+        let previousUrn = view.currentRenderedDeviceUrn
+        print("📺 [MANAGER] Unregistering view that was rendering: \(previousUrn ?? "nil")")
+        
+        // Check if this view was the PiP source view - if so, invalidate it
+        if #available(iOS 15.0, *) {
+            if pipTargetView === view || pipTargetView === view.previewViewForPiP {
+                print("📺 [MANAGER] This view was the PiP source - invalidating PiP source state")
+                pipHasValidSourceView = false
+                pipTargetView = nil
+            }
+        }
+        
+        // Remove the view from our list
         self.remoteViews.removeAll { $0.value === view }
-        print("🧠 [MANAGER] A remote view has unregistered. Total views: \(self.remoteViews.count)")
+        print("📺 [MANAGER] View unregistered. Remaining views: \(self.remoteViews.count)")
+        
+        // If this view was rendering a stream, that stream is now available
+        // Schedule a reassignment in case other views are waiting
+        if previousUrn != nil {
+            DispatchQueue.main.async { [weak self] in
+                guard let self = self else { return }
+                print("📺 [MANAGER] Stream released, checking for waiting views...")
+                self.assignStreamsToAvailableViews()
+            }
+        }
     }
 
     private func assignStreamsToAvailableViews() {
-        print("🧠 [MANAGER] Assigning streams to views...")
+        print("🧠 [MANAGER] ========== assignStreamsToAvailableViews called ==========")
         
-        // Get a set of all streams that are already being rendered.
-        let renderedUrns = Set(self.remoteViews.compactMap { $0.value?.currentRenderedDeviceUrn })
+        // Clean up dead weak references first
+        let beforeCount = self.remoteViews.count
+        self.remoteViews.removeAll { $0.value == nil }
+        let removedCount = beforeCount - self.remoteViews.count
+        if removedCount > 0 {
+            print("🧠 [MANAGER] Cleaned up \(removedCount) dead weak references")
+        }
         
-        // Find all views that are not currently rendering anything.
-        let availableViews = self.remoteViews.compactMap { $0.value }.filter { $0.currentRenderedDeviceUrn == nil }
+        // Also check for views that are no longer in a window (orphaned)
+        // These views should release their streams
+        for viewWrapper in self.remoteViews {
+            if let view = viewWrapper.value,
+               view.currentRenderedDeviceUrn != nil,
+               view.window == nil {
+                print("🧠 [MANAGER] Found orphaned view (not in window), clearing its stream")
+                view.clearStream()
+            }
+        }
+        
+        // Get a set of all streams that are already being rendered by VALID views
+        let renderedUrns = Set(self.remoteViews.compactMap { wrapper -> String? in
+            guard let view = wrapper.value,
+                  view.window != nil,  // Only count views that are actually visible
+                  let urn = view.currentRenderedDeviceUrn else {
+                return nil
+            }
+            return urn
+        })
+        print("🧠 [MANAGER] Currently rendered URNs (by visible views): \(renderedUrns)")
+        
+        // Find all views that are not currently rendering anything AND are in a window
+        let availableViews = self.remoteViews.compactMap { $0.value }.filter { 
+            $0.currentRenderedDeviceUrn == nil && $0.window != nil 
+        }
+        
+        // Log all views and their state
+        print("🧠 [MANAGER] All registered views:")
+        for (index, viewWrapper) in self.remoteViews.enumerated() {
+            if let view = viewWrapper.value {
+                let inWindow = view.window != nil
+                print("🧠 [MANAGER]   View \(index): rendering=\(view.currentRenderedDeviceUrn ?? "nil"), inWindow=\(inWindow)")
+            } else {
+                print("🧠 [MANAGER]   View \(index): <deallocated>")
+            }
+        }
         
         // Find all video streams that are not currently being rendered.
         var availableStreams: [(participantId: String, stream: IVSStageStream)] = []
+        print("🧠 [MANAGER] Participants and their streams:")
         for p in self.participants {
+            print("🧠 [MANAGER]   Participant: \(p.info.participantId ?? "nil")")
             for s in p.streams {
-                if s.device.descriptor().type == IVSDeviceType(rawValue: 5) && !renderedUrns.contains(s.device.descriptor().urn) {
+                let urn = s.device.descriptor().urn
+                let type = s.device.descriptor().type.rawValue
+                let isVideo = type == 5
+                let alreadyRendered = renderedUrns.contains(urn)
+                print("🧠 [MANAGER]     Stream URN: \(urn), type: \(type), isVideo: \(isVideo), alreadyRendered: \(alreadyRendered)")
+                
+                if isVideo && !alreadyRendered {
                     availableStreams.append((p.info.participantId, s))
                 }
             }
@@ -814,14 +1077,45 @@ class IVSStageManager: NSObject, IVSStageStreamDelegate, IVSStageStrategy, IVSSt
         if let targetId = self.targetParticipantId {
             availableStreams.sort { a, _ in a.participantId == targetId }
         }
-
-        print("🧠 [MANAGER] Found \(availableViews.count) available views and \(availableStreams.count) available streams.")
+        
+        print("🧠 [MANAGER] Summary: \(self.remoteViews.count) view refs, \(availableViews.count) available views (in window), \(availableStreams.count) available streams")
 
         // Assign each available stream to an available view.
+        if availableViews.isEmpty && !availableStreams.isEmpty {
+            print("🧠 [MANAGER] ⚠️ No available views but streams exist! Views might need to register.")
+        } else if !availableViews.isEmpty && availableStreams.isEmpty && !self.participants.isEmpty {
+            // Views want streams but all streams are "taken" - this might be a stale state
+            // Force a cleanup and retry
+            print("🧠 [MANAGER] ⚠️ Views available but streams appear taken. Checking for stale state...")
+            
+            // Check if any "rendering" view is actually orphaned
+            var freedSomething = false
+            for viewWrapper in self.remoteViews {
+                if let view = viewWrapper.value,
+                   view.currentRenderedDeviceUrn != nil,
+                   view.window == nil {
+                    print("🧠 [MANAGER] Freeing stream from orphaned view")
+                    view.clearStream()
+                    freedSomething = true
+                }
+            }
+            
+            // If we freed something, retry assignment
+            if freedSomething {
+                print("🧠 [MANAGER] Retrying assignment after cleanup...")
+                // Recursive call but with cleaned state
+                DispatchQueue.main.async { [weak self] in
+                    self?.assignStreamsToAvailableViews()
+                }
+                return
+            }
+        }
+        
         for (view, streamInfo) in zip(availableViews, availableStreams) {
-            print("🧠 [MANAGER] Assigning stream \(streamInfo.stream.device.descriptor().urn) to a view.")
+            print("🧠 [MANAGER] ✅ Assigning stream \(streamInfo.stream.device.descriptor().urn) to view")
             view.renderStream(participantId: streamInfo.participantId, deviceUrn: streamInfo.stream.device.descriptor().urn)
         }
+        print("🧠 [MANAGER] ========== assignStreamsToAvailableViews complete ==========")
     }
     // --- END NEW VIEW MANAGEMENT API ---
 
@@ -829,6 +1123,30 @@ class IVSStageManager: NSObject, IVSStageStreamDelegate, IVSStageStrategy, IVSSt
     func setMicrophoneMuted(muted: Bool) {
         microphoneStream?.setMuted(muted)
         print("Microphone muted: \(muted)")
+    }
+    
+    func setCameraMuted(muted: Bool, placeholderText: String?) {
+        // For custom camera capture, we send placeholder frames
+        if useCustomCameraCapture, let customCapture = customCameraCapture {
+            customCapture.setCameraMuted(muted, placeholderText: placeholderText)
+        } else {
+            // For native IVS camera, just mute the stream
+            cameraStream?.setMuted(muted)
+        }
+        print("Camera muted: \(muted)")
+        
+        // Emit event for React Native
+        delegate?.stageManagerDidEmitEvent(eventName: "onCameraMuteStateChanged", body: [
+            "muted": muted,
+            "placeholderActive": useCustomCameraCapture && muted
+        ])
+    }
+    
+    func isCameraMuted() -> Bool {
+        if useCustomCameraCapture, let customCapture = customCameraCapture {
+            return customCapture.isCameraMuted
+        }
+        return cameraStream?.isMuted ?? false
     }
     
     // MARK: - Picture-in-Picture Public API
@@ -961,7 +1279,11 @@ class IVSStageManager: NSObject, IVSStageStreamDelegate, IVSStageStrategy, IVSSt
     private func setupLocalCameraPiP(sourceView: UIView) {
         print("🖼️ [PiP] Setting up local camera PiP with source view")
         
-        // First, set up the Video Call API source view
+        // Note: For custom camera capture, ExpoIVSStagePreviewView now adds a hidden
+        // IVSImagePreviewView for better PiP compatibility. The sourceView should
+        // already contain this when using custom capture.
+        
+        // Set up the Video Call API source view
         pipController.setupWithSourceView(sourceView)
         pipTargetView = sourceView
         
@@ -1144,6 +1466,13 @@ class IVSStageManager: NSObject, IVSStageStreamDelegate, IVSStageStrategy, IVSSt
     func updatePiPSourceIfNeeded() {
         guard pipController.isEnabled, _pipOptions.sourceView == .remote else { return }
         
+        // Safety check: If we think we have a valid source view but it's not in a window anymore,
+        // invalidate it so we can set up with a new view
+        if pipHasValidSourceView, let targetView = pipTargetView, targetView.window == nil {
+            print("🖼️ [PiP] Current source view is no longer in window - invalidating")
+            pipHasValidSourceView = false
+        }
+        
         // We prioritize the target participant if set, otherwise any remote video
         var candidateStream: IVSStageStream?
         var candidateSourceView: UIView?
@@ -1237,6 +1566,22 @@ class IVSStageManager: NSObject, IVSStageStreamDelegate, IVSStageStrategy, IVSSt
     
     public func getCustomCameraPreviewLayer() -> AVCaptureVideoPreviewLayer? {
         return self.customCameraCapture?.previewLayer
+    }
+    
+    /// Get the IVS preview view for the custom image source
+    /// This is useful for PiP as it's recognized by iOS as a valid video source
+    public func getCustomImageSourcePreviewView() -> IVSImagePreviewView? {
+        guard useCustomCameraCapture,
+              let imageSource = self.customImageSource else {
+            return nil
+        }
+        
+        do {
+            return try imageSource.previewView()
+        } catch {
+            print("📸 [IVSStageManager] Could not get preview view from custom image source: \(error)")
+            return nil
+        }
     }
     
     public func getCurrentCameraPosition() -> String {

@@ -322,7 +322,14 @@ public class IVSPictureInPictureController: NSObject {
     
     deinit {
         NotificationCenter.default.removeObserver(self)
-        cleanup()
+        // Don't call cleanup() from deinit - it uses DispatchQueue.main.sync which
+        // can cause deadlocks during JavaScript reload. Instead, do minimal cleanup:
+        // Invalidate timer directly without the wrapper function to avoid any side effects
+        placeholderTimer?.invalidate()
+        placeholderTimer = nil
+        // Stop PiP if possible, but don't force main thread
+        pipController?.stopPictureInPicture()
+        // Let ARC handle the rest - no UI operations or delegate callbacks in deinit
     }
     
     // MARK: - Setup
@@ -518,7 +525,18 @@ public class IVSPictureInPictureController: NSObject {
         aggressivePreWarm { [weak self, weak controller] in
             guard let self = self, let controller = controller else { return }
             print("🖼️ [PiP] Setup complete with source view: \(sourceView)")
+            print("🖼️ [PiP] Source view frame: \(sourceView.frame)")
             print("🖼️ [PiP] Source view in window: \(sourceView.window != nil)")
+            print("🖼️ [PiP] Source view subviews: \(sourceView.subviews.count)")
+            for (index, subview) in sourceView.subviews.enumerated() {
+                print("🖼️ [PiP]   - Subview \(index): \(type(of: subview)), alpha: \(subview.alpha), hidden: \(subview.isHidden)")
+            }
+            print("🖼️ [PiP] Source view sublayers: \(sourceView.layer.sublayers?.count ?? 0)")
+            if let sublayers = sourceView.layer.sublayers {
+                for (index, layer) in sublayers.enumerated() {
+                    print("🖼️ [PiP]   - Layer \(index): \(type(of: layer))")
+                }
+            }
             print("🖼️ [PiP] isPictureInPicturePossible: \(controller.isPictureInPicturePossible)")
         }
     }

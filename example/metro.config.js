@@ -11,6 +11,15 @@ config.resolver.blockList = [
   ...Array.from(config.resolver.blockList ?? []),
   new RegExp(path.resolve('..', 'node_modules', 'react')),
   new RegExp(path.resolve('..', 'node_modules', 'react-native')),
+  // Block parent's expo packages to prevent version conflicts
+  new RegExp(path.resolve('..', 'node_modules', 'expo') + '(?!-realtime)'),
+  new RegExp(path.resolve('..', 'node_modules', 'expo-constants')),
+  new RegExp(path.resolve('..', 'node_modules', 'expo-asset')),
+  new RegExp(path.resolve('..', 'node_modules', 'expo-file-system')),
+  new RegExp(path.resolve('..', 'node_modules', 'expo-font')),
+  new RegExp(path.resolve('..', 'node_modules', 'expo-keep-awake')),
+  new RegExp(path.resolve('..', 'node_modules', 'expo-modules-core')),
+  new RegExp(path.resolve('..', 'node_modules', '@expo')),
 ];
 
 config.resolver.nodeModulesPaths = [

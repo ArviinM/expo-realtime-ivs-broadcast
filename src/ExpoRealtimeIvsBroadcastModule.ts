@@ -12,6 +12,8 @@ export type ExpoRealtimeIvsBroadcastModuleType = {
   setStreamsPublished(published: boolean): Promise<void>;
   swapCamera(): Promise<void>;
   setMicrophoneMuted(muted: boolean): Promise<void>;
+  setCameraMuted(muted: boolean, placeholderText?: string | null): Promise<void>;
+  isCameraMuted(): Promise<boolean>;
   requestPermissions(): Promise<PermissionStatusMap>;
   
   // Picture-in-Picture methods

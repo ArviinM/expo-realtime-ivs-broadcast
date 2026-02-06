@@ -261,6 +261,12 @@ class IVSStageManager(private val context: Context) : Stage.Strategy, StageRende
     fun unregisterRemoteView(view: ExpoIVSRemoteStreamView) {
         remoteViews.removeAll { it.get() == view }
         Log.i("ExpoIVSStageManager", "🧠 [MANAGER] A remote view has unregistered. Total views: ${remoteViews.count { it.get() != null }}")
+        
+        // Trigger reassignment after a short delay to handle view recreation during navigation
+        mainHandler.postDelayed({
+            Log.i("ExpoIVSStageManager", "🧠 [MANAGER] Delayed reassignment after view unregistered")
+            assignStreamsToAvailableViews()
+        }, 50)
     }
 
     private fun assignStreamsToAvailableViews() {

@@ -35,7 +35,11 @@ class ExpoIVSRemoteStreamView: ExpoView {
     }
 
     deinit {
-        // When the view is destroyed, unregister from the manager.
+        print("📺 [REMOTE VIEW] deinit called, clearing stream and unregistering")
+        // Clear the stream first so the URN is released before unregistering
+        // This ensures the stream can be reclaimed by new views
+        cleanupStreamView()
+        // Then unregister from the manager
         stageManager?.unregisterRemoteView(self)
     }
 
@@ -52,19 +56,21 @@ class ExpoIVSRemoteStreamView: ExpoView {
     // MARK: - Setup and Rendering
 
     private func resolveStageManager() {
-        // guard let module = appContext?.legacyModule(implementing: ExpoRealtimeIvsBroadcastModule.self) else { return }
+        print("📺 [REMOTE VIEW] resolveStageManager called, appContext: \(appContext != nil)")
+        
         guard let moduleRegistry = appContext?.moduleRegistry else {
-            print("ExpoRealtimeIvsBroadcastModule: Could not find moduleRegistry in app context.")
+            print("📺 [REMOTE VIEW] ERROR: Could not find moduleRegistry in app context.")
             return
         }
 
         guard let untypedModule = moduleRegistry.get(moduleWithName: "ExpoRealtimeIvsBroadcast"),
               let module = untypedModule as? ExpoRealtimeIvsBroadcastModule else {
-            print("ExpoIVSStagePreviewView: Could not find or cast ExpoRealtimeIvsBroadcastModule from module registry using get(moduleWithName:).")
+            print("📺 [REMOTE VIEW] ERROR: Could not find or cast ExpoRealtimeIvsBroadcastModule.")
             return
         }
 
         self.stageManager = module.ivsStageManager
+        print("📺 [REMOTE VIEW] Got stageManager: \(stageManager != nil)")
         self.stageManager?.registerRemoteView(self)
     }
 

@@ -8,7 +8,8 @@ This module provides React Native components and a comprehensive API to integrat
 
 | Library Version | Expo SDK | React Native | React   | Notes |
 |-----------------|----------|--------------|---------|-------|
-| 0.2.1           | 54       | 0.81.x       | 19.1.x  | **Fixed iOS PiP pre-warming reliability** |
+| 0.2.7           | 54       | 0.81.x       | 19.1.x  | **Added in-app floating mini player for navigation** |
+| 0.2.1           | 54       | 0.81.x       | 19.1.x  | Fixed iOS PiP pre-warming reliability |
 | 0.2.0           | 54       | 0.81.x       | 19.1.x  | Added Picture-in-Picture support |
 | 0.1.7           | 54       | 0.81.x       | 19.1.x  | |
 | 0.1.4           | 53       | 0.79.x       | 19.0.x  | |
@@ -197,6 +198,43 @@ You can subscribe to events from the native module. Each listener function retur
     -   Payload: `{ state: 'started' | 'stopped' | 'restored' }`
 -   `addOnPiPErrorListener(listener)`: Fired when a PiP error occurs.
     -   Payload: `{ error: string }`
+
+## In-App Floating Mini Player
+
+In addition to system Picture-in-Picture (for when the app goes to background), the example app demonstrates a **Discord-style in-app floating mini player**. This allows users to navigate between screens while the live stream continues as a small, draggable overlay in the corner.
+
+### How It Works
+
+The in-app mini player uses a two-layer approach:
+
+- **In-app navigation**: A floating mini player overlay (built with `react-native-reanimated` and `react-native-gesture-handler`) appears when the user navigates away from the stream screen. The mini player is draggable, snaps to corners, and can be tapped to return to the full stream view.
+- **App background**: The existing native system PiP activates automatically when the app goes to background, continuing the stream outside the app.
+
+### Architecture
+
+The mini player implementation lives in the example app and consists of:
+
+- **`FloatingPlayerContext`**: State machine managing `IDLE`, `EXPANDED`, and `MINI` states with `AppState` coordination for system PiP transitions.
+- **`FloatingStreamContainer`**: Animated overlay that renders the video view only in `MINI` mode. Uses spring animations for smooth appear/disappear transitions with scale and opacity effects.
+- **`MiniPlayerControls`**: Close and expand buttons overlaid on the mini player.
+
+When on the stream screen, the video view renders **inline** as part of the scrollable page content (natural feel). When navigating away, the floating mini player appears in the corner with the same stream. Only one native video view instance exists at any time to avoid conflicts.
+
+### Gesture Support
+
+- **Pan**: Drag the mini player to reposition. On release, snaps to the nearest screen corner with a spring animation.
+- **Tap**: Navigate back to the stream screen and expand to full view.
+- **Swipe off edge**: Dismiss the mini player (optionally leaves the stream).
+
+### Example App Dependencies
+
+The in-app mini player in the example app requires:
+
+```bash
+npx expo install react-native-reanimated react-native-gesture-handler react-native-worklets
+```
+
+The `react-native-reanimated/plugin` must be added to your `babel.config.js`.
 
 ## Picture-in-Picture Examples
 
