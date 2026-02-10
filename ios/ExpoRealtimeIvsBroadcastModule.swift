@@ -37,6 +37,10 @@ public class ExpoRealtimeIvsBroadcastModule: Module, IVSStageManagerDelegate {
         self.ivsStageManager?.initializeLocalStreams(audioConfig: nil, videoConfig: nil)
     }
 
+    AsyncFunction("destroyLocalStreams") {
+        self.ivsStageManager?.destroyLocalStreams()
+    }
+
     AsyncFunction("joinStage") { (token: String, options: [String: Any]?) in
       let targetId = options?["targetParticipantId"] as? String
       self.ivsStageManager?.joinStage(token: token, targetParticipantId: targetId)
@@ -152,7 +156,8 @@ public class ExpoRealtimeIvsBroadcastModule: Module, IVSStageManagerDelegate {
 
     // Cleanup when the module is destroyed
     OnDestroy {
-        self.ivsStageManager?.leaveStage() // Ensure stage is left if active
+        self.ivsStageManager?.leaveStage()
+        self.ivsStageManager?.destroyLocalStreams()
         self.ivsStageManager = nil
     }
   }

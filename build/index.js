@@ -13,6 +13,23 @@ export async function initializeStage(audioConfig, videoConfig) {
 export async function initializeLocalStreams(audioConfig, videoConfig) {
     return await ExpoRealtimeIvsBroadcastModule.initializeLocalStreams(audioConfig, videoConfig);
 }
+/**
+ * Destroy local camera and microphone streams, fully releasing hardware resources.
+ * This is the symmetric teardown counterpart to `initializeLocalStreams()`.
+ *
+ * Call this when the broadcast session is completely finished to turn off the
+ * camera indicator and free hardware. After calling this, you must call
+ * `initializeLocalStreams()` again before using the camera or microphone.
+ *
+ * @remarks
+ * - On iOS, this stops the AVCaptureSession which turns off the green camera indicator.
+ * - On Android, this releases the camera and microphone device streams.
+ * - `setCameraMuted(true)` does NOT release hardware — it only stops sending frames.
+ * - `leaveStage()` does NOT release hardware — it only disconnects from the IVS stage.
+ */
+export async function destroyLocalStreams() {
+    return await ExpoRealtimeIvsBroadcastModule.destroyLocalStreams();
+}
 export async function joinStage(token, options) {
     return await ExpoRealtimeIvsBroadcastModule.joinStage(token, options);
 }

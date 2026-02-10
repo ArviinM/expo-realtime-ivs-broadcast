@@ -78,6 +78,10 @@ class ExpoRealtimeIvsBroadcastModule : Module(), IVSStageManagerDelegate, Pictur
             IVSStageManager.instance?.initializeLocalStreams()
         }
 
+        AsyncFunction("destroyLocalStreams") {
+            IVSStageManager.instance?.destroyLocalStreams()
+        }
+
         AsyncFunction("joinStage") { token: String, options: Map<String, Any>? ->
             val targetId = options?.get("targetParticipantId") as? String
             IVSStageManager.instance?.joinStage(token, targetId)

@@ -138,6 +138,27 @@ class IVSStageManager(private val context: Context) : Stage.Strategy, StageRende
     fun leaveStage() {
         setStreamsPublished(false)
         stage?.leave()
+        stage = null
+    }
+
+    /// Fully releases camera and microphone hardware resources.
+    fun destroyLocalStreams() {
+        Log.i("ExpoIVSStageManager", "Destroying local streams and releasing hardware.")
+
+        // Release camera stream
+        cameraStream?.muted = true
+        cameraStream = null
+
+        // Release microphone stream
+        microphoneStream?.muted = true
+        microphoneStream = null
+
+        // Reset device references so initializeLocalStreams() can re-discover
+        localCamera = null
+        localMicrophone = null
+        availableCameras = emptyList()
+
+        Log.i("ExpoIVSStageManager", "✅ Local streams destroyed. Camera and microphone released.")
     }
 
     fun setStreamsPublished(published: Boolean) {

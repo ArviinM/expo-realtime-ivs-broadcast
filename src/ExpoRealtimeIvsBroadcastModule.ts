@@ -7,6 +7,7 @@ import { LocalAudioConfig, LocalVideoConfig, PermissionStatusMap, ExpoRealtimeIv
 export type ExpoRealtimeIvsBroadcastModuleType = {
   initializeStage(audioConfig?: LocalAudioConfig, videoConfig?: LocalVideoConfig): Promise<void>;
   initializeLocalStreams(audioConfig?: LocalAudioConfig, videoConfig?: LocalVideoConfig): Promise<void>;
+  destroyLocalStreams(): Promise<void>;
   joinStage(token: string, options?: { targetParticipantId?: string }): Promise<void>;
   leaveStage(): Promise<void>;
   setStreamsPublished(published: boolean): Promise<void>;
