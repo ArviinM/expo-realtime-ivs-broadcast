@@ -4,7 +4,7 @@ Thanks for your interest in contributing! This guide will help you get set up.
 
 ## Prerequisites
 
-- Node.js 18+
+- Node.js 22+
 - Xcode 15+ (for iOS development)
 - Android Studio (for Android development)
 - An [Amazon IVS](https://aws.amazon.com/ivs/) account with a Real-Time Stage set up (for testing)
@@ -54,7 +54,6 @@ docs/          → Implementation guides and notes
 | Command | Description |
 |---------|-------------|
 | `npm run build` | Compile TypeScript to `build/` |
-| `npm run lint` | Run ESLint |
 | `npm run test` | Run tests |
 | `npm run clean` | Remove build artifacts |
 | `npm run open:ios` | Open iOS project in Xcode |
@@ -96,7 +95,7 @@ When adding a new method exposed to JS, you need to update:
 - Keep PRs focused — one feature or fix per PR
 - If your change is platform-specific (iOS or Android only), mention it clearly
 - Test on both platforms when possible, or note which platform you tested on
-- Run `npm run lint` and `npm run build` before submitting
+- Run `npm run build` before submitting
 - Update the README if your change affects the public API
 
 ## Reporting Bugs
