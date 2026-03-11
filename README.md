@@ -592,9 +592,40 @@ const styles = StyleSheet.create({
 });
 ```
 
+## Roadmap
+
+Planned features and improvements. Contributions are welcome — feel free to pick one up!
+
+### Stream Quality & Configuration
+- [ ] Video config (resolution, framerate, max bitrate)
+- [ ] Audio config (bitrate, stereo/mono, noise suppression)
+- [ ] Adaptive bitrate / auto quality
+
+### Device Management
+- [ ] `getAvailableCameras()` — enumerate cameras (front, back, ultra-wide)
+- [ ] `getAvailableMicrophones()` — enumerate mics (built-in, Bluetooth, wired)
+- [ ] `selectCamera(deviceId)` / `selectMicrophone(deviceId)` — select specific device
+- [ ] `onAudioDeviceChanged` event — detect Bluetooth/wired mic connect/disconnect
+
+### Stream Controls
+- [ ] `setCameraZoom(level)` — pinch-to-zoom support for back camera
+- [ ] `setTorch(enabled)` — flashlight toggle for back camera
+- [ ] Audio level metering (`onAudioLevelChanged` event for VU meters)
+
+### Multi-Participant
+- [ ] Render multiple remote streams simultaneously
+- [ ] Participant metadata / custom attributes
+- [ ] Screen sharing support
+
+### Quality of Life
+- [ ] Network quality indicator event
+- [ ] Reconnection handling
+- [ ] Stats API (bitrate, fps, latency)
+- [ ] Web platform support (IVS Web SDK)
+
 ## Contributing
 
-Contributions are welcome! Please open an issue or submit a pull request.
+Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for setup instructions and guidelines.
 
 ## License
 
