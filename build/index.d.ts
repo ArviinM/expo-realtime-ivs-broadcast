@@ -6,6 +6,21 @@ export { ExpoIVSRemoteStreamView } from './ExpoIVSRemoteStreamView';
 export { useStageParticipants } from './useStageParticipants';
 export declare function initializeStage(audioConfig?: LocalAudioConfig, videoConfig?: LocalVideoConfig): Promise<void>;
 export declare function initializeLocalStreams(audioConfig?: LocalAudioConfig, videoConfig?: LocalVideoConfig): Promise<void>;
+/**
+ * Destroy local camera and microphone streams, fully releasing hardware resources.
+ * This is the symmetric teardown counterpart to `initializeLocalStreams()`.
+ *
+ * Call this when the broadcast session is completely finished to turn off the
+ * camera indicator and free hardware. After calling this, you must call
+ * `initializeLocalStreams()` again before using the camera or microphone.
+ *
+ * @remarks
+ * - On iOS, this stops the AVCaptureSession which turns off the green camera indicator.
+ * - On Android, this releases the camera and microphone device streams.
+ * - `setCameraMuted(true)` does NOT release hardware — it only stops sending frames.
+ * - `leaveStage()` does NOT release hardware — it only disconnects from the IVS stage.
+ */
+export declare function destroyLocalStreams(): Promise<void>;
 export declare function joinStage(token: string, options?: {
     targetParticipantId?: string;
 }): Promise<void>;

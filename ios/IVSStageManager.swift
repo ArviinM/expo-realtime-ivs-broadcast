@@ -800,25 +800,49 @@ class IVSStageManager: NSObject, IVSStageStreamDelegate, IVSStageStrategy, IVSSt
 
     func leaveStage() {
         if self.stage != nil {
-            print("IVSStageManager: Preparing to leave stage. Setting publishing to false and refreshing strategy.")
-            // Set publishing to false and refresh strategy before actually leaving
+            print("IVSStageManager: Preparing to leave stage.")
             self.setStreamsPublished(published: false)
-            
-            // It might be good practice to wait a very brief moment or ensure refreshStrategy
-            // has been processed if there are race conditions, but typically it should be fine.
-            // For robustness, one could use a short delay or a completion handler if refreshStrategy had one.
-
-        stage?.leave()
-        print("Left stage.")
-            // Consider nil-ing out stage and streams here or in a disconnected delegate callback
-            // self.stage = nil
-            // self.cameraStream = nil
-            // self.microphoneStream = nil
-            // self.currentPreviewDeviceUrn = nil // From ExpoIVSStagePreviewView if it shares this manager directly
-            // moduleEventEmitter?.sendEvent(withName: "onStageConnectionStateChanged", body: ["state": "disconnected"])
+            stage?.leave()
+            stage = nil
+            print("Left stage.")
         } else {
             print("IVSStageManager: Attempted to leave stage, but stage is already nil.")
         }
+    }
+
+    // MARK: - Teardown Local Streams
+
+    /// Fully releases camera and microphone hardware resources.
+    /// This is the symmetric counterpart to `initializeLocalStreams()`.
+    /// After calling this, `initializeLocalStreams()` must be called again
+    /// before the camera or microphone can be used.
+    func destroyLocalStreams() {
+        print("IVSStageManager: Destroying local streams and releasing hardware.")
+
+        // 1. Stop custom camera capture session (releases AVCaptureSession → camera hardware)
+        if useCustomCameraCapture {
+            customCameraCapture?.setCameraMuted(true) // Stop placeholder timer first
+            customCameraCapture?.stopCapture()        // Stop AVCaptureSession
+            customCameraCapture?.customImageSource = nil
+            customCameraCapture = nil
+            customImageSource = nil
+            print("📸 [IVSStageManager] Custom camera capture destroyed.")
+        }
+
+        // 2. Mute and release native IVS camera stream
+        cameraStream?.setMuted(true)
+        cameraStream = nil
+
+        // 3. Mute and release microphone stream
+        microphoneStream?.setMuted(true)
+        microphoneStream = nil
+
+        // 4. Reset state so initializeLocalStreams() can be called again cleanly
+        currentCameraDevice = nil
+        availableCameras = []
+        useCustomCameraCapture = false
+
+        print("IVSStageManager: ✅ Local streams destroyed. Camera and microphone released.")
     }
 
     func setStreamsPublished(published: Bool) {
