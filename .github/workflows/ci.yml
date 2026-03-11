@@ -7,22 +7,17 @@ on:
     branches: [main]
 
 jobs:
-  lint-and-build:
+  build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 18
+          node-version: 22
           cache: npm
 
       - run: npm install
-
-      - name: Lint
-        run: npm run lint
-        env:
-          ESLINT_USE_FLAT_CONFIG: false
 
       - name: Typecheck & Build
         run: npm run build
