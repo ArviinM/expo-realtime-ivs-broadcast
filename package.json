@@ -25,8 +25,14 @@
   "keywords": [
     "react-native",
     "expo",
-    "expo-realtime-ivs-broadcast",
-    "ExpoRealtimeIvsBroadcast"
+    "amazon-ivs",
+    "ivs",
+    "ivs-stages",
+    "ivs-broadcast",
+    "live-streaming",
+    "real-time-streaming",
+    "picture-in-picture",
+    "expo-module"
   ],
   "repository": "https://github.com/ArviinM/expo-realtime-ivs-broadcast",
   "bugs": {
