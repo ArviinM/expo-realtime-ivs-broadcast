@@ -1,5 +1,17 @@
 import { requireNativeModule, EventSubscription } from 'expo-modules-core';
-import { LocalAudioConfig, LocalVideoConfig, PermissionStatusMap, ExpoRealtimeIvsBroadcastModuleEvents, PiPOptions } from './ExpoRealtimeIvsBroadcast.types';
+import {
+  LocalAudioConfig,
+  LocalVideoConfig,
+  PermissionStatusMap,
+  ExpoRealtimeIvsBroadcastModuleEvents,
+  PiPOptions,
+  AudioPreset,
+  AudioInputDevice,
+  BackgroundBehaviorOptions,
+  RTCStatsPayload,
+  ThermalMitigationOptions,
+  ThermalState,
+} from './ExpoRealtimeIvsBroadcast.types';
 
 // This combines the module's method signatures with the event emitter's signatures.
 // By defining `addListener` and `removeListeners` explicitly, we get strong type-checking
@@ -16,7 +28,24 @@ export type ExpoRealtimeIvsBroadcastModuleType = {
   setCameraMuted(muted: boolean, placeholderText?: string | null): Promise<void>;
   isCameraMuted(): Promise<boolean>;
   requestPermissions(): Promise<PermissionStatusMap>;
-  
+
+  // Audio preset / device picker / gain
+  setAudioPreset(preset: AudioPreset): Promise<void>;
+  listAudioInputs(): Promise<AudioInputDevice[]>;
+  setPreferredAudioInput(urn: string | null): Promise<void>;
+  setInputGain(gain: number): Promise<boolean>;
+
+  // Mock mode (DEBUG only)
+  setMockMode(enabled: boolean): Promise<void>;
+
+  // Observability / config helpers
+  setBackgroundBehavior(options: BackgroundBehaviorOptions): Promise<void>;
+  requestRTCStats(): Promise<RTCStatsPayload>;
+
+  // Thermal adaptation
+  setThermalMitigation(options: ThermalMitigationOptions): Promise<void>;
+  getThermalState(): Promise<ThermalState>;
+
   // Picture-in-Picture methods
   enablePictureInPicture(options?: PiPOptions): Promise<boolean>;
   disablePictureInPicture(): Promise<void>;
@@ -24,6 +53,7 @@ export type ExpoRealtimeIvsBroadcastModuleType = {
   stopPictureInPicture(): Promise<void>;
   isPictureInPictureActive(): Promise<boolean>;
   isPictureInPictureSupported(): Promise<boolean>;
+  isPiPRemoteSourceValid(): Promise<boolean>;
 
   addListener<EventName extends keyof ExpoRealtimeIvsBroadcastModuleEvents>(
     eventName: EventName,

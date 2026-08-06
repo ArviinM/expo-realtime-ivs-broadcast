@@ -63,6 +63,69 @@ export async function isCameraMuted() {
 export async function requestPermissions() {
     return await ExpoRealtimeIvsBroadcastModule.requestPermissions();
 }
+// --- Audio API ---
+/**
+ * Set the audio session preset. Controls echo cancellation, noise suppression,
+ * gain, and which speaker the audio plays out of.
+ *
+ * - **`videoChat`** (default): Two-way communication. AEC/NS/AGC ON. Lower input gain.
+ *   Use when the host needs the speaker open and the mic open simultaneously.
+ * - **`subscribeOnly`**: Viewer mode. Routes through media volume (loud).
+ *   Use this for buyer/viewer screens — fixes the "audio comes out earpiece" bug.
+ * - **`studio`**: Highest quality. AEC/NS/AGC OFF. Best perceived loudness on the
+ *   built-in mic and proper level when an external mic is plugged in.
+ *   **Use this for sellers / broadcasters** unless you need echo cancellation.
+ *
+ * Call this **before** `joinStage()` for cleanest results. Changing mid-stream
+ * causes a brief audio glitch on iOS.
+ *
+ * @platform iOS — fully implemented via IVSStageAudioManager
+ * @platform Android — implemented via StageAudioManager where supported
+ */
+export async function setAudioPreset(preset) {
+    return await ExpoRealtimeIvsBroadcastModule.setAudioPreset(preset);
+}
+/**
+ * List all audio input devices available for selection.
+ * Updates dynamically as devices are connected/disconnected — subscribe to
+ * `addOnAudioRouteChangedListener` to re-fetch on changes.
+ */
+export async function listAudioInputs() {
+    return await ExpoRealtimeIvsBroadcastModule.listAudioInputs();
+}
+/**
+ * Set the preferred audio input device. Pass the `urn` returned from `listAudioInputs()`,
+ * or `null` to revert to the system default.
+ *
+ * Note: the OS retains final say over routing — when AirPods connect mid-stream
+ * the OS may auto-switch to them regardless of preference. The
+ * `onAudioRouteChanged` event will tell you what actually became active.
+ */
+export async function setPreferredAudioInput(urn) {
+    return await ExpoRealtimeIvsBroadcastModule.setPreferredAudioInput(urn);
+}
+/**
+ * Software gain boost on top of the OS hardware level. `1.0` = no boost,
+ * range `0.0`–`5.0` (clamped). Useful when the built-in mic is too quiet and
+ * the user is too far from the phone.
+ *
+ * @returns `true` if applied, `false` if the active input doesn't support gain
+ *          (e.g., built-in iPhone mic on iOS — gain isn't settable for that input).
+ */
+export async function setInputGain(gain) {
+    return await ExpoRealtimeIvsBroadcastModule.setInputGain(gain);
+}
+// --- Mock Mode (DEBUG only) ---
+/**
+ * Enable a debug-only mock camera that synthesizes frames without using the
+ * physical camera. Lets you exercise the full IVS lifecycle on iOS Simulator
+ * and Android Emulator without needing Continuity Camera or a connected webcam.
+ *
+ * Safe to call on release builds — it's a no-op outside DEBUG.
+ */
+export async function setMockMode(enabled) {
+    return await ExpoRealtimeIvsBroadcastModule.setMockMode(enabled);
+}
 // --- Event Emitter ---
 export function addOnStageConnectionStateChangedListener(listener) {
     return ExpoRealtimeIvsBroadcastModule.addListener('onStageConnectionStateChanged', listener);
@@ -93,6 +156,101 @@ export function addOnParticipantStreamsAddedListener(listener) {
 }
 export function addOnParticipantStreamsRemovedListener(listener) {
     return ExpoRealtimeIvsBroadcastModule.addListener('onParticipantStreamsRemoved', listener);
+}
+/**
+ * Fires when the active audio input device changes (AirPods connect, headphones
+ * unplug, user picks a different device).
+ */
+export function addOnAudioRouteChangedListener(listener) {
+    return ExpoRealtimeIvsBroadcastModule.addListener('onAudioRouteChanged', listener);
+}
+/**
+ * Fires on audio session interruption (incoming phone call, Siri, etc.) and resume.
+ * iOS only — Android handles this automatically through the OS.
+ */
+export function addOnAudioInterruptionListener(listener) {
+    return ExpoRealtimeIvsBroadcastModule.addListener('onAudioInterruption', listener);
+}
+/**
+ * Real-time mic audio level (peak + rms in dB). Fires ~10x/sec while a mic
+ * stream is active. Plot the peak on a meter so the broadcaster can verify
+ * their mic is actually hot before going live.
+ */
+export function addOnAudioLevelListener(listener) {
+    return ExpoRealtimeIvsBroadcastModule.addListener('onAudioLevel', listener);
+}
+/**
+ * Periodic WebRTC stats (bitrate, RTT, packet loss, jitter, fps). Fires every
+ * ~2 seconds while a stream is publishing or subscribing.
+ */
+export function addOnRTCStatsListener(listener) {
+    return ExpoRealtimeIvsBroadcastModule.addListener('onRTCStats', listener);
+}
+/**
+ * Fires when a remote participant mutes/unmutes a stream. Use to drive the
+ * mic / camera muted icons on remote-participant tiles.
+ */
+export function addOnRemoteMuteStateChangedListener(listener) {
+    return ExpoRealtimeIvsBroadcastModule.addListener('onRemoteMuteStateChanged', listener);
+}
+/**
+ * Fires when the local subscribe state changes. Android only — on iOS this
+ * information is folded into the connection-state event.
+ */
+export function addOnSubscribeStateChangedListener(listener) {
+    return ExpoRealtimeIvsBroadcastModule.addListener('onSubscribeStateChanged', listener);
+}
+/**
+ * Configure how the SDK should behave when the host app enters background.
+ * Without this call, the SDK keeps publishing camera+audio — wasting battery
+ * and bandwidth — and keeps subscribing to remote video.
+ *
+ * Recommended for broadcaster: `{ stopPublishing: true, subscribeMode: 'audioOnly' }`.
+ *
+ * Note: the host app must also declare the right background modes
+ * (UIBackgroundModes=audio on iOS, foreground service on Android) — this
+ * function only configures the SDK's strategy, not the OS-level entitlements.
+ */
+export async function setBackgroundBehavior(options) {
+    return await ExpoRealtimeIvsBroadcastModule.setBackgroundBehavior(options);
+}
+/**
+ * One-shot RTC stats fetch. Use when you want stats at a specific moment
+ * (e.g., right after the user complains about quality) without subscribing to
+ * the 2s polling event.
+ */
+export async function requestRTCStats() {
+    return await ExpoRealtimeIvsBroadcastModule.requestRTCStats();
+}
+// --- Thermal Adaptation ---
+/**
+ * Configure auto-downshift behavior under thermal pressure. When enabled, the
+ * SDK observes `ProcessInfo.thermalState` (iOS) / `PowerManager` (Android
+ * API 29+) and automatically drops to `reducedFramerate` when the device reaches
+ * 'serious' or 'critical' state.
+ *
+ * @example
+ * ```ts
+ * await setThermalMitigation({ enabled: true, reducedFramerate: 15 });
+ * ```
+ *
+ * Subscribe to `addOnThermalStateChangedListener` to surface the current state in your UI.
+ */
+export async function setThermalMitigation(options) {
+    return await ExpoRealtimeIvsBroadcastModule.setThermalMitigation(options);
+}
+/**
+ * Read the current thermal state synchronously (well, via a promise).
+ */
+export async function getThermalState() {
+    return await ExpoRealtimeIvsBroadcastModule.getThermalState();
+}
+/**
+ * Fires when the device thermal state changes. Hook this to your network-stats
+ * HUD or a "device hot" warning banner.
+ */
+export function addOnThermalStateChangedListener(listener) {
+    return ExpoRealtimeIvsBroadcastModule.addListener('onThermalStateChanged', listener);
 }
 // --- Picture-in-Picture Methods ---
 /**
@@ -152,6 +310,14 @@ export async function isPictureInPictureActive() {
 export async function isPictureInPictureSupported() {
     return await ExpoRealtimeIvsBroadcastModule.isPictureInPictureSupported();
 }
+/**
+ * Whether the native PiP remote source is currently a real rendering view (true)
+ * vs the device.previewView() fallback (false). Diagnostic only — prefer the
+ * onPiPSourceValidityChanged event for the authoritative ready signal.
+ */
+export async function isPiPRemoteSourceValid() {
+    return await ExpoRealtimeIvsBroadcastModule.isPiPRemoteSourceValid();
+}
 // --- PiP Event Listeners ---
 /**
  * Add a listener for PiP state changes.
@@ -170,5 +336,12 @@ export function addOnPiPStateChangedListener(listener) {
  */
 export function addOnPiPErrorListener(listener) {
     return ExpoRealtimeIvsBroadcastModule.addListener('onPiPError', listener);
+}
+/**
+ * Add a listener for PiP remote-source validity changes — fires true when the
+ * native source becomes a real rendering view, false on the placeholder fallback.
+ */
+export function addOnPiPSourceValidityChangedListener(listener) {
+    return ExpoRealtimeIvsBroadcastModule.addListener('onPiPSourceValidityChanged', listener);
 }
 //# sourceMappingURL=index.js.map

@@ -1,7 +1,6 @@
 package expo.modules.realtimeivsbroadcast
 
 import android.Manifest
-import android.app.Activity
 import android.content.pm.PackageManager
 import android.os.Build
 import android.util.Rational
@@ -13,7 +12,7 @@ import expo.modules.kotlin.modules.ModuleDefinition
 import expo.modules.kotlin.exception.Exceptions
 
 class ExpoRealtimeIvsBroadcastModule : Module(), IVSStageManagerDelegate, PictureInPictureDelegate {
-    
+
     // PiP Manager reference (lazy initialized)
     private val pipManager: PictureInPictureManager? by lazy {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -22,7 +21,7 @@ class ExpoRealtimeIvsBroadcastModule : Module(), IVSStageManagerDelegate, Pictur
             }
         } else null
     }
-    
+
     @RequiresApi(Build.VERSION_CODES.P)
     override fun definition() = ModuleDefinition {
         Name("ExpoRealtimeIvsBroadcast")
@@ -39,17 +38,28 @@ class ExpoRealtimeIvsBroadcastModule : Module(), IVSStageManagerDelegate, Pictur
             "onPiPError",
             "onCameraMuteStateChanged",
             "onCameraSwapped",
-            "onCameraSwapError"
+            "onCameraSwapError",
+            "onAudioRouteChanged",
+            "onAudioInterruption",
+            "onAudioLevel",
+            "onRTCStats",
+            "onRemoteMuteStateChanged",
+            "onSubscribeStateChanged",
+            "onThermalStateChanged"
         )
 
         OnCreate {
             Log.i("ExpoRealtimeIvsBroadcast", "Module OnCreate - Initializing IVSStageManager...")
-            if (IVSStageManager.instance == null) {
-                val reactContext = appContext.reactContext ?: throw Exceptions.ReactContextLost()
-                IVSStageManager(reactContext)
-                Log.i("ExpoRealtimeIvsBroadcast", "IVSStageManager instance created")
-            } else {
-                Log.i("ExpoRealtimeIvsBroadcast", "IVSStageManager instance already exists")
+            // Thread-safe singleton init: synchronize on the companion object so
+            // concurrent module re-creates can't race and produce two instances.
+            synchronized(IVSStageManager::class.java) {
+                if (IVSStageManager.instance == null) {
+                    val reactContext = appContext.reactContext ?: throw Exceptions.ReactContextLost()
+                    IVSStageManager(reactContext)
+                    Log.i("ExpoRealtimeIvsBroadcast", "IVSStageManager instance created")
+                } else {
+                    Log.i("ExpoRealtimeIvsBroadcast", "IVSStageManager instance already exists")
+                }
             }
             IVSStageManager.instance?.delegate = this@ExpoRealtimeIvsBroadcastModule
         }
@@ -58,7 +68,7 @@ class ExpoRealtimeIvsBroadcastModule : Module(), IVSStageManagerDelegate, Pictur
 
         AsyncFunction("requestPermissions") {
             val reactContext = appContext.reactContext ?: throw Exceptions.ReactContextLost()
-            
+
             val cameraStatus = ContextCompat.checkSelfPermission(reactContext, Manifest.permission.CAMERA)
             val microphoneStatus = ContextCompat.checkSelfPermission(reactContext, Manifest.permission.RECORD_AUDIO)
 
@@ -69,13 +79,11 @@ class ExpoRealtimeIvsBroadcastModule : Module(), IVSStageManagerDelegate, Pictur
         }
 
         AsyncFunction("initializeStage") { audioConfig: Map<String, Any>?, videoConfig: Map<String, Any>? ->
-            // TODO: Add audioConfig and videoConfig
-            IVSStageManager.instance?.initializeStage(audioConfig = null, videoConfig = null)
+            IVSStageManager.instance?.initializeStage(audioConfigMap = audioConfig, videoConfigMap = videoConfig)
         }
 
         AsyncFunction("initializeLocalStreams") { audioConfig: Map<String, Any>?, videoConfig: Map<String, Any>? ->
-            // TODO: Add audioConfig and videoConfig
-            IVSStageManager.instance?.initializeLocalStreams()
+            IVSStageManager.instance?.initializeLocalStreams(audioConfigMap = audioConfig, videoConfigMap = videoConfig)
         }
 
         AsyncFunction("destroyLocalStreams") {
@@ -104,38 +112,75 @@ class ExpoRealtimeIvsBroadcastModule : Module(), IVSStageManagerDelegate, Pictur
         }
 
         AsyncFunction("setCameraMuted") { muted: Boolean, placeholderText: String? ->
-            // TODO: Implement camera mute with placeholder frames on Android
-            // For now, just emit the event so JS state stays in sync
-            Log.d("ExpoRealtimeIvsBroadcast", "setCameraMuted called: muted=$muted, text=$placeholderText")
-            sendEvent("onCameraMuteStateChanged", mapOf(
-                "muted" to muted,
-                "placeholderActive" to false // Placeholder not implemented on Android yet
-            ))
+            IVSStageManager.instance?.setCameraMuted(muted, placeholderText)
         }
 
         AsyncFunction("isCameraMuted") {
-            // TODO: Implement actual camera mute state tracking on Android
-            return@AsyncFunction false
+            return@AsyncFunction IVSStageManager.instance?.isCameraMuted() ?: false
+        }
+
+        // --- Audio API ---
+
+        AsyncFunction("setAudioPreset") { preset: String ->
+            IVSStageManager.instance?.setAudioPreset(preset)
+        }
+
+        AsyncFunction("listAudioInputs") {
+            return@AsyncFunction IVSStageManager.instance?.listAudioInputs() ?: emptyList<Map<String, Any>>()
+        }
+
+        AsyncFunction("setPreferredAudioInput") { urn: String? ->
+            IVSStageManager.instance?.setPreferredAudioInput(urn)
+        }
+
+        AsyncFunction("setInputGain") { gain: Double ->
+            return@AsyncFunction IVSStageManager.instance?.setInputGain(gain.toFloat()) ?: false
+        }
+
+        // --- Mock Mode (DEBUG-gated inside the manager) ---
+
+        AsyncFunction("setMockMode") { enabled: Boolean ->
+            IVSStageManager.instance?.setMockMode(enabled)
+        }
+
+        // --- Observability / Background ---
+
+        AsyncFunction("setBackgroundBehavior") { options: Map<String, Any>? ->
+            IVSStageManager.instance?.setBackgroundBehavior(options)
+        }
+
+        AsyncFunction("requestRTCStats") {
+            return@AsyncFunction IVSStageManager.instance?.snapshotRTCStats() ?: emptyMap<String, Any?>()
+        }
+
+        // --- Thermal Adaptation ---
+
+        AsyncFunction("setThermalMitigation") { options: Map<String, Any>? ->
+            IVSStageManager.instance?.setThermalMitigation(options)
+        }
+
+        AsyncFunction("getThermalState") {
+            return@AsyncFunction IVSStageManager.instance?.currentThermalState() ?: "nominal"
         }
 
         // --- Picture-in-Picture Methods ---
-        
+
         AsyncFunction("enablePictureInPicture") { options: Map<String, Any>? ->
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
                 Log.w("ExpoRealtimeIvsBroadcast", "PiP requires Android O (API 26) or higher")
                 return@AsyncFunction false
             }
-            
+
             val activity = appContext.currentActivity
             if (activity == null) {
                 Log.e("ExpoRealtimeIvsBroadcast", "No activity available for PiP")
                 return@AsyncFunction false
             }
-            
+
             val pipOptions = PiPOptions().apply {
                 options?.let { opts ->
                     (opts["autoEnterOnBackground"] as? Boolean)?.let { autoEnterOnBackground = it }
-                    (opts["sourceView"] as? String)?.let { 
+                    (opts["sourceView"] as? String)?.let {
                         sourceView = if (it == "local") PiPOptions.PiPSourceView.LOCAL else PiPOptions.PiPSourceView.REMOTE
                     }
                     (opts["preferredAspectRatio"] as? Map<*, *>)?.let { ratio ->
@@ -145,35 +190,35 @@ class ExpoRealtimeIvsBroadcastModule : Module(), IVSStageManagerDelegate, Pictur
                     }
                 }
             }
-            
+
             return@AsyncFunction pipManager?.enable(activity, pipOptions) ?: false
         }
-        
+
         AsyncFunction("disablePictureInPicture") {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 pipManager?.disable()
             }
         }
-        
+
         AsyncFunction("startPictureInPicture") {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 pipManager?.start()
             }
         }
-        
+
         AsyncFunction("stopPictureInPicture") {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 pipManager?.stop()
             }
         }
-        
+
         AsyncFunction("isPictureInPictureActive") {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 return@AsyncFunction pipManager?.isActive() ?: false
             }
             return@AsyncFunction false
         }
-        
+
         AsyncFunction("isPictureInPictureSupported") {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 val activity = appContext.currentActivity
@@ -185,13 +230,17 @@ class ExpoRealtimeIvsBroadcastModule : Module(), IVSStageManagerDelegate, Pictur
         }
 
         // --- View Definitions ---
-        
+
         View(ExpoIVSStagePreviewView::class) {
             Prop("mirror") { view: ExpoIVSStagePreviewView, mirror: Boolean ->
                 view.setMirror(mirror)
             }
             Prop("scaleMode") { view: ExpoIVSStagePreviewView, scaleMode: String ->
-                view.setScaleMode(scaleMode)
+                val normalized = if (scaleMode == "fit" || scaleMode == "fill") scaleMode else "fit"
+                if (normalized != scaleMode) {
+                    Log.w("ExpoRealtimeIvsBroadcast", "Invalid scaleMode '$scaleMode' — defaulting to 'fit'")
+                }
+                view.setScaleMode(normalized)
             }
         }
 
@@ -199,7 +248,11 @@ class ExpoRealtimeIvsBroadcastModule : Module(), IVSStageManagerDelegate, Pictur
             // This view is "dumb" and managed by the IVSStageManager.
             // It only needs a scaleMode prop for visual configuration.
             Prop("scaleMode") { view: ExpoIVSRemoteStreamView, scaleMode: String ->
-                view.setScaleMode(scaleMode)
+                val normalized = if (scaleMode == "fit" || scaleMode == "fill") scaleMode else "fit"
+                if (normalized != scaleMode) {
+                    Log.w("ExpoRealtimeIvsBroadcast", "Invalid scaleMode '$scaleMode' — defaulting to 'fit'")
+                }
+                view.setScaleMode(normalized)
             }
         }
     }
@@ -209,13 +262,13 @@ class ExpoRealtimeIvsBroadcastModule : Module(), IVSStageManagerDelegate, Pictur
     override fun stageManagerDidEmitEvent(eventName: String, body: Map<String, Any?>) {
         sendEvent(eventName, body)
     }
-    
+
     // --- PictureInPictureDelegate Implementation ---
-    
+
     override fun onPiPStateChanged(state: String) {
         sendEvent("onPiPStateChanged", mapOf("state" to state))
     }
-    
+
     override fun onPiPError(error: String) {
         sendEvent("onPiPError", mapOf("error" to error))
     }
