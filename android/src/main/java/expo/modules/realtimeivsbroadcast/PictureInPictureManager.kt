@@ -135,17 +135,38 @@ class PictureInPictureManager private constructor() : Application.ActivityLifecy
         if (isActive) {
             stop()
         }
-        
+
+        // DISARM auto-enter on the Activity. enable() arms it via
+        // setPictureInPictureParams(setAutoEnterEnabled(true)), and that flag
+        // lives on the ACTIVITY — not on this manager — so clearing our own
+        // state is not enough. Without this the activity keeps auto-entering
+        // PiP for every later background, including while the user is
+        // BROADCASTING, which tears the capture surface and leaves a black
+        // screen when they come back or end the stream (QA 2026-08-07:
+        // "black screen after ending live; might be because I triggered PiP
+        // during live"). Mirrors the arming call in enable().
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            currentActivity?.let { activity ->
+                try {
+                    activity.setPictureInPictureParams(
+                        PictureInPictureParams.Builder().setAutoEnterEnabled(false).build()
+                    )
+                } catch (e: Exception) {
+                    Log.w(TAG, "Failed to disarm PiP auto-enter: ${e.message}")
+                }
+            }
+        }
+
         currentActivity?.application?.let {
             if (isRegisteredForLifecycle) {
                 it.unregisterActivityLifecycleCallbacks(this)
                 isRegisteredForLifecycle = false
             }
         }
-        
+
         isEnabled = false
         currentActivity = null
-        
+
         Log.i(TAG, "PiP disabled")
     }
     
