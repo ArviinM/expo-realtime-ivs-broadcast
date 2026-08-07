@@ -95,6 +95,14 @@ export async function swapCamera(): Promise<void> {
  * Android only today; resolves as a no-op elsewhere.
  */
 export async function refreshCameraStream(): Promise<void> {
+  // JS can run ahead of native: an OTA/JS reload reaches devices whose
+  // installed binary predates this method, and calling it there throws
+  // "refreshCameraStream is not a function" (seen in the field the same day
+  // this shipped). Recovery is best-effort by nature, so degrade to a no-op
+  // rather than turning an older build into an error on every foreground.
+  const nativeFn = (ExpoRealtimeIvsBroadcastModule as unknown as Record<string, unknown>)
+    ?.refreshCameraStream;
+  if (typeof nativeFn !== 'function') return;
   return await ExpoRealtimeIvsBroadcastModule.refreshCameraStream();
 }
 
