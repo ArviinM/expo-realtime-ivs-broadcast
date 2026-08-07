@@ -113,7 +113,17 @@ class PictureInPictureManager private constructor() : Application.ActivityLifecy
             activity.application.registerActivityLifecycleCallbacks(this)
             isRegisteredForLifecycle = true
         }
-        
+
+        // ARM the activity's PiP params NOW. Without this, setAutoEnterEnabled
+        // was only ever built inside buildPiPParams() and never handed to the
+        // Activity, so Android never auto-entered PiP when the user left — and
+        // since nothing in the host app calls onUserLeaveHint() either, PiP
+        // could not start by ANY path. That is exactly the reported "pressing
+        // home does not trigger PiP outside the app" (QA 2026-08-07, physical
+        // Android 16 device). setPictureInPictureParams is idempotent and is
+        // re-pushed by updatePiPParams() when aspect ratio / source rect change.
+        updatePiPParams()
+
         Log.i(TAG, "PiP enabled with options: autoEnter=${options.autoEnterOnBackground}, source=${options.sourceView}")
         return true
     }
