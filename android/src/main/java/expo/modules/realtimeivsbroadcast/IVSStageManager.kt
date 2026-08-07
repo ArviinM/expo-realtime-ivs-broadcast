@@ -538,6 +538,32 @@ class IVSStageManager(private val context: Context) : Stage.Strategy, StageRende
         )
     }
 
+    /**
+     * Rebuild the capture stream on the SAME camera and re-publish it.
+     *
+     * After the app is backgrounded, Android takes the camera away (there is
+     * no foreground service, by design) and the existing ImageLocalStageStream
+     * comes back dead: the seller and every viewer see a frozen frame while the
+     * UI still says LIVE. Device QA found that swapping cameras revived it —
+     * because swapCamera() builds a NEW stream and refreshes the stage
+     * strategy. This does exactly that without changing camera, so recovery
+     * doesn't flip the seller to the selfie camera and still works on devices
+     * with only one camera (QA 2026-08-07 O1.1).
+     */
+    fun refreshCameraStream() {
+        val device = localCamera
+        if (device == null || cameraStream == null) {
+            Log.w("ExpoIVSStageManager", "⚠️ refreshCameraStream: no camera stream to refresh")
+            return
+        }
+
+        Log.i("ExpoIVSStageManager", "🔄 Rebuilding camera stream on ${device.descriptor.friendlyName}")
+        cameraStream = ImageLocalStageStream(device, this.stageConfiguration.videoConfiguration)
+        stage?.refreshStrategy()
+
+        mainHandler.postDelayed({ notifyPreviewViewsToRefresh() }, 500)
+    }
+
     private fun notifyPreviewViewsToRefresh() {
         // Clean up null weak references
         previewViews.removeAll { it.get() == null }

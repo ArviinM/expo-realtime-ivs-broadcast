@@ -27,6 +27,18 @@ export declare function joinStage(token: string, options?: {
 export declare function leaveStage(): Promise<void>;
 export declare function setStreamsPublished(published: boolean): Promise<void>;
 export declare function swapCamera(): Promise<void>;
+/**
+ * Rebuild the local capture stream on the CURRENT camera and re-publish it.
+ *
+ * Recovery for a capture that died while the host app was backgrounded: on
+ * Android the OS takes the camera from a backgrounded app, and the existing
+ * stream comes back dead — publishing continues but every frame is frozen.
+ * Swapping cameras fixed it in the field precisely because it rebuilds the
+ * stream; this does the same without changing which camera is in use.
+ *
+ * Android only today; resolves as a no-op elsewhere.
+ */
+export declare function refreshCameraStream(): Promise<void>;
 export declare function setMicrophoneMuted(muted: boolean): Promise<void>;
 /**
  * Mute or unmute the camera.

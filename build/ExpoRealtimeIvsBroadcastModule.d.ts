@@ -10,6 +10,8 @@ export type ExpoRealtimeIvsBroadcastModuleType = {
     leaveStage(): Promise<void>;
     setStreamsPublished(published: boolean): Promise<void>;
     swapCamera(): Promise<void>;
+    /** Rebuild the capture stream on the current camera (Android recovery). */
+    refreshCameraStream(): Promise<void>;
     setMicrophoneMuted(muted: boolean): Promise<void>;
     setCameraMuted(muted: boolean, placeholderText?: string | null): Promise<void>;
     isCameraMuted(): Promise<boolean>;

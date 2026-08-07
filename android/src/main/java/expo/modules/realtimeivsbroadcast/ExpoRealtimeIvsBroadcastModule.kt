@@ -107,6 +107,12 @@ class ExpoRealtimeIvsBroadcastModule : Module(), IVSStageManagerDelegate, Pictur
             IVSStageManager.instance?.swapCamera()
         }
 
+        // Rebuild the capture stream on the same camera — recovery for a
+        // capture that died while the app was backgrounded.
+        AsyncFunction("refreshCameraStream") {
+            IVSStageManager.instance?.refreshCameraStream()
+        }
+
         AsyncFunction("setMicrophoneMuted") { muted: Boolean ->
             IVSStageManager.instance?.setMicrophoneMuted(muted)
         }

@@ -83,6 +83,21 @@ export async function swapCamera(): Promise<void> {
   return await ExpoRealtimeIvsBroadcastModule.swapCamera();
 }
 
+/**
+ * Rebuild the local capture stream on the CURRENT camera and re-publish it.
+ *
+ * Recovery for a capture that died while the host app was backgrounded: on
+ * Android the OS takes the camera from a backgrounded app, and the existing
+ * stream comes back dead — publishing continues but every frame is frozen.
+ * Swapping cameras fixed it in the field precisely because it rebuilds the
+ * stream; this does the same without changing which camera is in use.
+ *
+ * Android only today; resolves as a no-op elsewhere.
+ */
+export async function refreshCameraStream(): Promise<void> {
+  return await ExpoRealtimeIvsBroadcastModule.refreshCameraStream();
+}
+
 export async function setMicrophoneMuted(muted: boolean): Promise<void> {
   return await ExpoRealtimeIvsBroadcastModule.setMicrophoneMuted(muted);
 }
