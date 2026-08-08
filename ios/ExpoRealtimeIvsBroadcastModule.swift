@@ -70,9 +70,14 @@ public class ExpoRealtimeIvsBroadcastModule: Module, IVSStageManagerDelegate {
       self.ivsStageManager?.joinStage(token: token, targetParticipantId: targetId)
     }
 
+    // Pinned to main. MINE-APP-3X was an EXC_BAD_ACCESS inside the SDK
+    // (`-[IVSStage leave]` → `-[IVSStageSession logger]`) reached from a
+    // dispatch worker thread — the default queue Expo hands AsyncFunction. The
+    // stage APIs are not thread-safe, and tearing one down off-main races the
+    // SDK's own callbacks onto a half-freed session.
     AsyncFunction("leaveStage") {
       self.ivsStageManager?.leaveStage()
-    }
+    }.runOnQueue(.main)
 
     AsyncFunction("setStreamsPublished") { (published: Bool) in
       self.ivsStageManager?.setStreamsPublished(published: published)

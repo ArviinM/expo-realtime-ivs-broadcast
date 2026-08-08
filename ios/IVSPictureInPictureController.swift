@@ -287,6 +287,10 @@ public class IVSPictureInPictureController: NSObject {
     // State
     public private(set) var isActive: Bool = false
     public private(set) var isEnabled: Bool = false
+    /// Set when iOS asks us to restore the UI because the user tapped the PiP
+    /// window, so the didBecomeActive sweep can tell that wake apart from a
+    /// return through the app switcher.
+    private var isRestoringFromPiP: Bool = false
     
     // Delegate
     public weak var delegate: IVSPictureInPictureControllerDelegate?
@@ -1087,8 +1091,30 @@ public class IVSPictureInPictureController: NSObject {
     }
     
     @objc private func applicationDidBecomeActive() {
-        // Could be used for cleanup or state updates when app returns
         print("🖼️ [PiP] App became active")
+
+        // Coming back through the app switcher (rather than by tapping the
+        // window) leaves PiP running, so the floating player sits on top of the
+        // livestream it is duplicating — Delro, iOS round 1 item A3. iOS only
+        // tears PiP down for the tap-to-restore path; every other way back into
+        // the foreground is ours to clean up.
+        //
+        // The grace period matters: on the tap path iOS is not required to call
+        // `restoreUserInterfaceForPictureInPictureStop` before activating the
+        // app, so stopping immediately could cut its own restore animation
+        // short. Re-checking after a beat lets that path claim the wake first.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+            guard let self = self else { return }
+            if self.isRestoringFromPiP {
+                self.isRestoringFromPiP = false
+                return
+            }
+            guard let controller = self.pipController,
+                  controller.isPictureInPictureActive,
+                  UIApplication.shared.applicationState == .active else { return }
+            print("🖼️ [PiP] Foregrounded outside PiP restore — stopping the window")
+            controller.stopPictureInPicture()
+        }
     }
     
     // MARK: - Public Getters
@@ -1147,7 +1173,8 @@ extension IVSPictureInPictureController: AVPictureInPictureControllerDelegate {
     
     public func pictureInPictureControllerDidStopPictureInPicture(_ pictureInPictureController: AVPictureInPictureController) {
         isActive = false
-        
+        isRestoringFromPiP = false
+
         // Stop placeholder frame generation
         stopPlaceholderFrameGeneration()
         
@@ -1178,6 +1205,9 @@ extension IVSPictureInPictureController: AVPictureInPictureControllerDelegate {
     
     public func pictureInPictureController(_ pictureInPictureController: AVPictureInPictureController, restoreUserInterfaceForPictureInPictureStopWithCompletionHandler completionHandler: @escaping (Bool) -> Void) {
         print("🖼️ [PiP] Restore user interface requested")
+        // Tapping the window is iOS's own way back into the app; the
+        // didBecomeActive sweep below must not cut its animation short.
+        isRestoringFromPiP = true
         delegate?.pictureInPictureWillRestore()
         completionHandler(true)
     }

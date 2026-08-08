@@ -1037,8 +1037,16 @@ class IVSStageManager: NSObject, IVSStageStreamDelegate, IVSStageStrategy, IVSSt
             }
             self.participants.removeAll()
 
-            stage?.leave()
+            // Detach BEFORE leaving. `leave()` runs SDK teardown that can call
+            // back in, and any second entry into leaveStage() — a duplicate JS
+            // call, or OnDestroy landing on top of one — would otherwise see a
+            // non-nil `stage` and leave an already-freed session a second time.
+            // That is MINE-APP-3X (EXC_BAD_ACCESS at 0x48 in the SDK's own
+            // session logger). Handing the object to a local and clearing the
+            // property first makes the double-leave unrepresentable.
+            let leavingStage = stage
             stage = nil
+            leavingStage?.leave()
             print("Left stage.")
         } else {
             print("IVSStageManager: Attempted to leave stage, but stage is already nil.")
