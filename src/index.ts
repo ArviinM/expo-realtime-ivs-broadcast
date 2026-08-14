@@ -1,6 +1,6 @@
-import { EventSubscription } from 'expo-modules-core';
+import type { EventSubscription } from 'expo-modules-core';
 import ExpoRealtimeIvsBroadcastModule from './ExpoRealtimeIvsBroadcastModule';
-import {
+import type {
     LocalAudioConfig,
     LocalVideoConfig,
     PermissionStatusMap,

@@ -1,7 +1,7 @@
 // In ExpoIVSStagePreviewView.tsx
 
 import * as React from 'react';
-import { ExpoIVSStagePreviewViewProps } from './ExpoRealtimeIvsBroadcast.types';
+import type { ExpoIVSStagePreviewViewProps } from './ExpoRealtimeIvsBroadcast.types';
 import { requireNativeViewManager } from 'expo-modules-core';
 
 // The name of this React component MUST EXACTLY MATCH the Swift class name.

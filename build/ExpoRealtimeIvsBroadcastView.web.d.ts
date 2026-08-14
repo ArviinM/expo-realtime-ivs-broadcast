@@ -1,3 +1,2 @@
-import * as React from 'react';
-export default function ExpoRealtimeIvsBroadcastView(): React.JSX.Element;
+export default function ExpoRealtimeIvsBroadcastView(): import("react").JSX.Element;
 //# sourceMappingURL=ExpoRealtimeIvsBroadcastView.web.d.ts.map

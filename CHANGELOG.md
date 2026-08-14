@@ -2,6 +2,17 @@
 
 All notable changes to `expo-realtime-ivs-broadcast`.
 
+## 0.3.0 — 2026-08-15
+
+### Tooling
+
+- **Expo SDK 57 / React Native 0.86 compatibility.** devDependencies bumped
+  (expo ~57, react-native 0.86.2, expo-module-scripts 56, explicit typescript),
+  and all type-only imports converted for the `verbatimModuleSyntax` tsconfig
+  that new expo-module-scripts enables. No runtime behavior changes.
+- Example app regenerated with `expo prebuild --clean` on SDK 57; Android
+  example builds green. iOS requires Xcode 26.4+ (SDK 56+ minimum).
+
 ## 0.2.9 — 2026-05-13
 
 ### Broadcaster

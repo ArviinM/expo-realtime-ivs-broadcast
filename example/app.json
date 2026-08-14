@@ -17,7 +17,10 @@
       "supportsTablet": true,
       "bundleIdentifier": "expo.modules.realtimeivsbroadcast.example",
       "infoPlist": {
-        "UIBackgroundModes": ["audio", "voip"],
+        "UIBackgroundModes": [
+          "audio",
+          "voip"
+        ],
         "NSCameraUsageDescription": "This app needs access to your camera to broadcast live video.",
         "NSMicrophoneUsageDescription": "This app needs access to your microphone to broadcast live audio."
       }
@@ -51,7 +54,8 @@
             "enablePictureInPicture": true
           }
         }
-      ]
+      ],
+      "expo-status-bar"
     ]
   }
 }

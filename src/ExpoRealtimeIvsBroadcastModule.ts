@@ -1,5 +1,6 @@
-import { requireNativeModule, EventSubscription } from 'expo-modules-core';
-import {
+import { requireNativeModule } from 'expo-modules-core';
+import type { EventSubscription } from 'expo-modules-core';
+import type {
   LocalAudioConfig,
   LocalVideoConfig,
   PermissionStatusMap,

@@ -1,5 +1,5 @@
-import { EventSubscription } from 'expo-modules-core';
-import { LocalAudioConfig, LocalVideoConfig, PermissionStatusMap, ExpoRealtimeIvsBroadcastModuleEvents, PiPOptions, AudioPreset, AudioInputDevice, BackgroundBehaviorOptions, RTCStatsPayload, ThermalMitigationOptions, ThermalState } from './ExpoRealtimeIvsBroadcast.types';
+import type { EventSubscription } from 'expo-modules-core';
+import type { LocalAudioConfig, LocalVideoConfig, PermissionStatusMap, ExpoRealtimeIvsBroadcastModuleEvents, PiPOptions, AudioPreset, AudioInputDevice, BackgroundBehaviorOptions, RTCStatsPayload, ThermalMitigationOptions, ThermalState } from './ExpoRealtimeIvsBroadcast.types';
 export type ExpoRealtimeIvsBroadcastModuleType = {
     initializeStage(audioConfig?: LocalAudioConfig, videoConfig?: LocalVideoConfig): Promise<void>;
     initializeLocalStreams(audioConfig?: LocalAudioConfig, videoConfig?: LocalVideoConfig): Promise<void>;

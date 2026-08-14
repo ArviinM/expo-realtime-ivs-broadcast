@@ -1,5 +1,5 @@
 import { NativeModule } from 'expo';
-import { ExpoRealtimeIvsBroadcastModuleEvents, PiPOptions } from './ExpoRealtimeIvsBroadcast.types';
+import type { ExpoRealtimeIvsBroadcastModuleEvents, PiPOptions } from './ExpoRealtimeIvsBroadcast.types';
 declare class ExpoRealtimeIvsBroadcastModule extends NativeModule<ExpoRealtimeIvsBroadcastModuleEvents> {
     enablePictureInPicture(_options?: PiPOptions): Promise<boolean>;
     disablePictureInPicture(): Promise<void>;
