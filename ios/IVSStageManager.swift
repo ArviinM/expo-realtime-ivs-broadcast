@@ -172,9 +172,22 @@ class CustomCameraCapture: NSObject, AVCaptureVideoDataOutputSampleBufferDelegat
             if connection.isVideoOrientationSupported {
                 connection.videoOrientation = .portrait
             }
-            // Mirror front camera
+            // NEVER mirror the PUBLISHED frames.
+            //
+            // This connection belongs to the AVCaptureVideoDataOutput whose
+            // sample buffers are handed to IVS, so anything set here is baked
+            // into what viewers receive. Mirroring the front camera here sent
+            // every viewer a flipped picture — text backwards, the room the
+            // wrong way round — while the host looked fine and had no way to
+            // tell, because the host's preview mirrors through a DIFFERENT
+            // connection (AVCaptureVideoPreviewLayer mirrors the front camera
+            // by itself via automaticallyAdjustsVideoMirroring).
+            //
+            // Mirror is a property of looking at yourself, not of being seen.
+            // The preview keeps it; the broadcast must not have it.
             if connection.isVideoMirroringSupported {
-                connection.isVideoMirrored = (position == .front)
+                connection.automaticallyAdjustsVideoMirroring = false
+                connection.isVideoMirrored = false
             }
             print("📸 [CustomCameraCapture] ✅ Configured video connection orientation")
         }
