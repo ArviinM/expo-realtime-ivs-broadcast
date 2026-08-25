@@ -270,7 +270,8 @@ class ExpoIVSRemoteStreamView(context: Context, appContext: AppContext) : ExpoVi
         val aspectMode = when (scaleMode.lowercase()) {
             "fill" -> AspectMode.FILL
             "fit" -> AspectMode.FIT
-            else -> AspectMode.FIT
+            // Unknown fills, matching iOS's ivsAspectMode and the declared default.
+            else -> AspectMode.FILL
         }
         try {
             // Try to set aspect mode on SurfaceView

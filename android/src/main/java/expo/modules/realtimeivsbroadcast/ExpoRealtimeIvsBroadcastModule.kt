@@ -242,9 +242,12 @@ class ExpoRealtimeIvsBroadcastModule : Module(), IVSStageManagerDelegate, Pictur
                 view.setMirror(mirror)
             }
             Prop("scaleMode") { view: ExpoIVSStagePreviewView, scaleMode: String ->
-                val normalized = if (scaleMode == "fit" || scaleMode == "fill") scaleMode else "fit"
+                // `fill` is the library default — both views declare it and the
+                // aspect mappings send anything unrecognised there. Only the prop
+                // setters said `fit`; see the iOS note for what that cost.
+                val normalized = if (scaleMode == "fit" || scaleMode == "fill") scaleMode else "fill"
                 if (normalized != scaleMode) {
-                    Log.w("ExpoRealtimeIvsBroadcast", "Invalid scaleMode '$scaleMode' — defaulting to 'fit'")
+                    Log.w("ExpoRealtimeIvsBroadcast", "Invalid scaleMode '$scaleMode' — defaulting to 'fill'")
                 }
                 view.setScaleMode(normalized)
             }
@@ -254,9 +257,12 @@ class ExpoRealtimeIvsBroadcastModule : Module(), IVSStageManagerDelegate, Pictur
             // This view is "dumb" and managed by the IVSStageManager.
             // It only needs a scaleMode prop for visual configuration.
             Prop("scaleMode") { view: ExpoIVSRemoteStreamView, scaleMode: String ->
-                val normalized = if (scaleMode == "fit" || scaleMode == "fill") scaleMode else "fit"
+                // `fill` is the library default — both views declare it and the
+                // aspect mappings send anything unrecognised there. Only the prop
+                // setters said `fit`; see the iOS note for what that cost.
+                val normalized = if (scaleMode == "fit" || scaleMode == "fill") scaleMode else "fill"
                 if (normalized != scaleMode) {
-                    Log.w("ExpoRealtimeIvsBroadcast", "Invalid scaleMode '$scaleMode' — defaulting to 'fit'")
+                    Log.w("ExpoRealtimeIvsBroadcast", "Invalid scaleMode '$scaleMode' — defaulting to 'fill'")
                 }
                 view.setScaleMode(normalized)
             }

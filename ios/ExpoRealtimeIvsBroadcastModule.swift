@@ -233,10 +233,11 @@ public class ExpoRealtimeIvsBroadcastModule: Module, IVSStageManagerDelegate {
       }
 
       Prop("scaleMode") { (view: ExpoIVSStagePreviewView, scaleMode: String) in
-        // Validate enum: only "fit" or "fill" are accepted; anything else falls back to "fit".
-        let normalized = (scaleMode == "fit" || scaleMode == "fill") ? scaleMode : "fit"
+        // Unrecognised falls back to `fill` — the view's own default and what
+        // its aspect mapping does. See the note on the remote view's setter.
+        let normalized = (scaleMode == "fit" || scaleMode == "fill") ? scaleMode : "fill"
         if normalized != scaleMode {
-          print("⚠️ [ExpoRealtimeIvsBroadcast] Invalid scaleMode '\(scaleMode)' — defaulting to 'fit'. Valid: 'fit' | 'fill'.")
+          print("⚠️ [ExpoRealtimeIvsBroadcast] Invalid scaleMode '\(scaleMode)' — defaulting to 'fill'. Valid: 'fit' | 'fill'.")
         }
         view.scaleMode = normalized
       }
@@ -244,11 +245,20 @@ public class ExpoRealtimeIvsBroadcastModule: Module, IVSStageManagerDelegate {
 
     // Expose the custom view for remote stream rendering
     View(ExpoIVSRemoteStreamView.self) {
+      // `fill` is this library's default, declared in three other places: both
+      // views' own `scaleMode` properties, and the aspect-mode mappings that
+      // send anything unrecognised to `.fill`. Only these prop setters said
+      // `fit`, and that disagreement was load-bearing: a render where the prop
+      // arrives nil (Fabric recycling) flipped the view fill -> fit, which
+      // differs, so `didSet` fired `updateScaleMode` and REBUILT the live
+      // preview letterboxed. Measured in mine-app on 2026-08-25: the viewer's
+      // 9:16 source sat centred in a 9:19.6 screen with symmetric 182px bands
+      // — a textbook `.fit` — while JS was passing "fill" the whole time.
       Prop("scaleMode") { (view: ExpoIVSRemoteStreamView, scaleMode: String?) in
-        let raw = scaleMode ?? "fit"
-        let normalized = (raw == "fit" || raw == "fill") ? raw : "fit"
+        let raw = scaleMode ?? "fill"
+        let normalized = (raw == "fit" || raw == "fill") ? raw : "fill"
         if normalized != raw {
-          print("⚠️ [ExpoRealtimeIvsBroadcast] Invalid scaleMode '\(raw)' — defaulting to 'fit'.")
+          print("⚠️ [ExpoRealtimeIvsBroadcast] Invalid scaleMode '\(raw)' — defaulting to 'fill'.")
         }
         view.scaleMode = normalized
       }
