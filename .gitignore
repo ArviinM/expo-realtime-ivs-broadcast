@@ -59,3 +59,9 @@ yarn-error.log
 
 # Expo
 .expo/*
+
+# `npm pack` output, used to vendor builds into apps locally
+*.tgz
+
+# created by running expo CLI at the repo root
+/app.json
