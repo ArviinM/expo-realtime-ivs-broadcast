@@ -2,6 +2,31 @@
 
 All notable changes to `expo-realtime-ivs-broadcast`.
 
+## 0.3.2 — 2026-08-25
+
+### Fixed
+
+- **Remote and preview views could letterbox a live stream despite `scaleMode="fill"`.**
+  `fill` is the library's default everywhere except the four prop setters
+  (iOS + Android, remote + stage preview), which fell back to `fit`. On iOS the
+  remote view's prop is optional, so a render where it arrived `nil` set `fit`,
+  and `updateScaleMode` rebuilt the live preview letterboxed. Measured in a
+  production app on iOS 26: a 9:16 source centred with symmetric 182 px bands
+  while JS passed `fill` throughout. All setters now default to `fill` for both
+  `nil` and unrecognised values, and Android's aspect mapping no longer falls
+  through to `FIT`. Passing a valid `"fit"` or `"fill"` behaves as before.
+
+## 0.3.1 — 2026-08-20
+
+### Fixed
+
+- **iOS: viewers received a mirrored broadcast from the front camera.**
+  `isVideoMirrored` was set on the `AVCaptureVideoDataOutput` connection, whose
+  sample buffers are what IVS publishes, so the mirror shipped to every viewer
+  (text backwards, the room reversed). The host couldn't tell, because their
+  preview mirrors through a separate `AVCaptureVideoPreviewLayer`. The preview
+  keeps its mirror; the published output no longer has one.
+
 ## 0.3.0 — 2026-08-15
 
 ### Tooling

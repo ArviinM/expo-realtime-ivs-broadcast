@@ -8,7 +8,11 @@ This module provides React Native components and a comprehensive API to integrat
 
 | Library Version | Expo SDK | React Native | React   | Notes |
 |-----------------|----------|--------------|---------|-------|
-| 0.2.8           | 54       | 0.81.x       | 19.1.x  | **Added `destroyLocalStreams()` for full camera/mic hardware release** |
+| 0.3.2           | 57       | 0.86.x       | 19.2.x  | **Fixed streams letterboxing despite `scaleMode="fill"`** |
+| 0.3.1           | 57       | 0.86.x       | 19.2.x  | Fixed iOS viewers seeing a mirrored front-camera broadcast |
+| 0.3.0           | 57       | 0.86.x       | 19.2.x  | Expo SDK 57 / React Native 0.86; iOS builds need Xcode 26.4+ |
+| 0.2.9           | 54       | 0.81.x       | 19.1.x  | 30 fps default, tuned bitrate, viewer RTC stats, close→reopen black-screen fix |
+| 0.2.8           | 54       | 0.81.x       | 19.1.x  | Added `destroyLocalStreams()` for full camera/mic hardware release |
 | 0.2.7           | 54       | 0.81.x       | 19.1.x  | Added in-app floating mini player for navigation |
 | 0.2.1           | 54       | 0.81.x       | 19.1.x  | Fixed iOS PiP pre-warming reliability |
 | 0.2.0           | 54       | 0.81.x       | 19.1.x  | Added Picture-in-Picture support |
