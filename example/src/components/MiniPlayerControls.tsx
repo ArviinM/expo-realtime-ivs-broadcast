@@ -38,7 +38,7 @@ export function MiniPlayerControls({ onExpand, onDismiss }: MiniPlayerControlsPr
 
 const styles = StyleSheet.create({
   overlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     justifyContent: 'space-between',
     alignItems: 'flex-end',
     padding: 6,
