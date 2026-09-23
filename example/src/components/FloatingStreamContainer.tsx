@@ -274,7 +274,7 @@ export function FloatingStreamContainer() {
 
 const styles = StyleSheet.create({
   fullScreenOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     zIndex: 9999,
     elevation: 9999,
   },
