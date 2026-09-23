@@ -1,5 +1,3 @@
-import * as React from 'react';
-
 // import { ExpoRealtimeIvsBroadcastViewProps } from './ExpoRealtimeIvsBroadcast.types';
 
 export default function ExpoRealtimeIvsBroadcastView() {

@@ -1,6 +1,6 @@
 import { registerWebModule, NativeModule } from 'expo';
 
-import { ExpoRealtimeIvsBroadcastModuleEvents, PiPOptions } from './ExpoRealtimeIvsBroadcast.types';
+import type { ExpoRealtimeIvsBroadcastModuleEvents, PiPOptions } from './ExpoRealtimeIvsBroadcast.types';
 
 class ExpoRealtimeIvsBroadcastModule extends NativeModule<ExpoRealtimeIvsBroadcastModuleEvents> {
   // Stub implementations for web (PiP not supported on web)

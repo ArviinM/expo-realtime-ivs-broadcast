@@ -11,9 +11,12 @@ class ExpoIVSRemoteStreamView: ExpoView {
     // This is the only state this view needs: what is it currently rendering?
     private(set) var currentRenderedDeviceUrn: String?
 
+    /// Remembered so a scaleMode change can rebuild the preview (see below).
+    private var currentRenderedParticipantId: String?
+
     // No more participantId or deviceUrn props!
     var scaleMode: String = "fill" {
-        didSet { updateScaleMode() }
+        didSet { updateScaleMode(previous: oldValue) }
     }
     
     /// Returns the actual IVS preview view for PiP capture
@@ -91,10 +94,16 @@ class ExpoIVSRemoteStreamView: ExpoView {
         }
 
         do {
-            let newPreview = try imageDevice.previewView()
-            
+            // The aspect mode is fixed at CREATION time. `IVSImagePreviewView`
+            // renders through its own layer, so the `contentMode` we used to set
+            // afterwards was a no-op and every remote stream came out letterboxed
+            // at the SDK default (`.fit`) — Delro, iOS round 1: "livestream does
+            // not scale to full screen, it looks like a smaller reso".
+            let newPreview = try imageDevice.previewView(with: ivsAspectMode)
+
             self.ivsImagePreviewView = newPreview
             self.currentRenderedDeviceUrn = deviceUrn
+            self.currentRenderedParticipantId = participantId
             addSubview(newPreview)
 
             newPreview.translatesAutoresizingMaskIntoConstraints = false
@@ -105,8 +114,10 @@ class ExpoIVSRemoteStreamView: ExpoView {
                 newPreview.trailingAnchor.constraint(equalTo: trailingAnchor)
             ])
 
-            updateScaleMode()
-            print("✅ [REMOTE VIEW] Manager commanded me to render URN: \(deviceUrn)")
+            // No updateScaleMode() here — the preview was just built with the
+            // right aspect mode, and applying it after the fact is what never
+            // worked in the first place.
+            print("✅ [REMOTE VIEW] Manager commanded me to render URN: \(deviceUrn) (aspect: \(scaleMode))")
             
             // Notify the stage manager that a stream started rendering (for PiP)
             // Use a longer delay to ensure the view hierarchy is fully set up
@@ -135,18 +146,25 @@ class ExpoIVSRemoteStreamView: ExpoView {
             oldPreview.removeFromSuperview()
             self.ivsImagePreviewView = nil
             self.currentRenderedDeviceUrn = nil
+            self.currentRenderedParticipantId = nil
         }
     }
 
-    private func updateScaleMode() {
-        // This method now safely uses optional chaining, applying mode only if view exists.
-        switch scaleMode.lowercased() {
-        case "fill":
-            ivsImagePreviewView?.contentMode = .scaleAspectFill
-        case "fit":
-            ivsImagePreviewView?.contentMode = .scaleAspectFit
-        default:
-            ivsImagePreviewView?.contentMode = .scaleAspectFill // Default to fill
-        }
+    /// `scaleMode` translated to the SDK enum. Anything unrecognised fills,
+    /// matching the JS-side default.
+    private var ivsAspectMode: IVSBroadcastConfiguration.AspectMode {
+        return scaleMode.lowercased() == "fit" ? .fit : .fill
+    }
+
+    /// The SDK gives no way to change a live preview's aspect mode, so a change
+    /// has to rebuild the preview against the same stream. In practice this
+    /// never fires — every call site passes a constant — but leaving the prop
+    /// silently inert is how the letterboxing hid for so long.
+    private func updateScaleMode(previous: String) {
+        guard previous.lowercased() != scaleMode.lowercased() else { return }
+        guard let participantId = currentRenderedParticipantId,
+              let deviceUrn = currentRenderedDeviceUrn else { return }
+        cleanupStreamView()
+        renderStream(participantId: participantId, deviceUrn: deviceUrn)
     }
 }

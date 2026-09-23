@@ -2,9 +2,13 @@
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.INTERNET" />
-    
-    <!-- Required for PiP to continue video in background -->
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <!--
+      NOTE: FOREGROUND_SERVICE / FOREGROUND_SERVICE_CAMERA /
+      FOREGROUND_SERVICE_MEDIA_PLAYBACK were declared here but backed no Service,
+      which is a Google Play policy liability. They are removed under the
+      "PiP-only background" scope: while in PiP the activity stays foreground-
+      visible so audio+video survive without a service. Re-add them ONLY together
+      with a real foregroundServiceType=mediaPlayback Service if background audio
+      WITHOUT PiP (e.g. screen-lock) is ever brought into scope.
+    -->
 </manifest>

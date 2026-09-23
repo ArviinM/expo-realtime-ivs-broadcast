@@ -113,7 +113,17 @@ class PictureInPictureManager private constructor() : Application.ActivityLifecy
             activity.application.registerActivityLifecycleCallbacks(this)
             isRegisteredForLifecycle = true
         }
-        
+
+        // ARM the activity's PiP params NOW. Without this, setAutoEnterEnabled
+        // was only ever built inside buildPiPParams() and never handed to the
+        // Activity, so Android never auto-entered PiP when the user left — and
+        // since nothing in the host app calls onUserLeaveHint() either, PiP
+        // could not start by ANY path. That is exactly the reported "pressing
+        // home does not trigger PiP outside the app" (QA 2026-08-07, physical
+        // Android 16 device). setPictureInPictureParams is idempotent and is
+        // re-pushed by updatePiPParams() when aspect ratio / source rect change.
+        updatePiPParams()
+
         Log.i(TAG, "PiP enabled with options: autoEnter=${options.autoEnterOnBackground}, source=${options.sourceView}")
         return true
     }
@@ -125,17 +135,38 @@ class PictureInPictureManager private constructor() : Application.ActivityLifecy
         if (isActive) {
             stop()
         }
-        
+
+        // DISARM auto-enter on the Activity. enable() arms it via
+        // setPictureInPictureParams(setAutoEnterEnabled(true)), and that flag
+        // lives on the ACTIVITY — not on this manager — so clearing our own
+        // state is not enough. Without this the activity keeps auto-entering
+        // PiP for every later background, including while the user is
+        // BROADCASTING, which tears the capture surface and leaves a black
+        // screen when they come back or end the stream (QA 2026-08-07:
+        // "black screen after ending live; might be because I triggered PiP
+        // during live"). Mirrors the arming call in enable().
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            currentActivity?.let { activity ->
+                try {
+                    activity.setPictureInPictureParams(
+                        PictureInPictureParams.Builder().setAutoEnterEnabled(false).build()
+                    )
+                } catch (e: Exception) {
+                    Log.w(TAG, "Failed to disarm PiP auto-enter: ${e.message}")
+                }
+            }
+        }
+
         currentActivity?.application?.let {
             if (isRegisteredForLifecycle) {
                 it.unregisterActivityLifecycleCallbacks(this)
                 isRegisteredForLifecycle = false
             }
         }
-        
+
         isEnabled = false
         currentActivity = null
-        
+
         Log.i(TAG, "PiP disabled")
     }
     

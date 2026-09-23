@@ -1,14 +1,18 @@
 {
   "name": "expo-realtime-ivs-broadcast",
-  "version": "0.2.8",
+  "version": "0.3.2",
   "description": "An Expo module for real-time broadcasting using Amazon IVS.",
   "main": "build/index.js",
   "types": "build/index.d.ts",
   "files": [
     "build",
     "src",
-    "ios",
-    "android",
+    "ios/**/*.swift",
+    "ios/**/*.h",
+    "ios/**/*.m",
+    "ios/**/*.podspec",
+    "android/src/**/*",
+    "android/build.gradle",
     "expo-module.config.json"
   ],
   "scripts": {
@@ -42,10 +46,11 @@
   "license": "MIT",
   "homepage": "https://github.com/ArviinM/expo-realtime-ivs-broadcast#readme",
   "devDependencies": {
-    "@types/react": "~19.1.10",
-    "expo": "~54.0.0",
-    "expo-module-scripts": "^5.0.7",
-    "react-native": "0.81.5"
+    "@types/react": "~19.2.0",
+    "expo": "^57.0.13",
+    "expo-module-scripts": "^56.0.3",
+    "react-native": "^0.86.2",
+    "typescript": "~5.9.2"
   },
   "peerDependencies": {
     "expo": "*",

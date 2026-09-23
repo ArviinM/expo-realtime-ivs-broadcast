@@ -1,4 +1,4 @@
-import * as React from 'react';
+import { jsx as _jsx } from "react/jsx-runtime";
 // import { ExpoRealtimeIvsBroadcastViewProps } from './ExpoRealtimeIvsBroadcast.types';
 export default function ExpoRealtimeIvsBroadcastView() {
     return (
@@ -9,8 +9,6 @@ export default function ExpoRealtimeIvsBroadcastView() {
     //     onLoad={() => props.onLoad({ nativeEvent: { url: props.url } })}
     //   />
     // </div>
-    <div>
-      <h1>Hello World</h1>
-    </div>);
+    _jsx("div", { children: _jsx("h1", { children: "Hello World" }) }));
 }
 //# sourceMappingURL=ExpoRealtimeIvsBroadcastView.web.js.map

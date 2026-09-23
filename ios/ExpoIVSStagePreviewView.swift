@@ -27,6 +27,16 @@ class ExpoIVSStagePreviewView: ExpoView {
     var scaleMode: String = "fill" {
         didSet {
             updateScaleMode()
+            // The native IVS preview bakes its aspect mode in at creation, so a
+            // changed scaleMode only lands if we rebuild it. Guarded on an actual
+            // change to keep this off the creation path (which sets the mode by
+            // construction and would otherwise recurse).
+            if oldValue.lowercased() != scaleMode.lowercased(), ivsImagePreviewView != nil {
+                // Drop the cached URN first — attachStream() short-circuits when
+                // the same device is already previewed.
+                removeAllPreviews()
+                refreshStream()
+            }
         }
     }
 
@@ -164,7 +174,11 @@ class ExpoIVSStagePreviewView: ExpoView {
 
         do {
             print("ExpoIVSStagePreviewView: Creating IVSImagePreviewView for device: \(newDeviceUrn)")
-            let newPreview = try imageDevice.previewView()
+            // Aspect mode is creation-time only on IVSImagePreviewView — setting
+            // `contentMode` afterwards does nothing (see ExpoIVSRemoteStreamView).
+            let newPreview = try imageDevice.previewView(
+                with: scaleMode.lowercased() == "fit" ? .fit : .fill
+            )
             newPreview.translatesAutoresizingMaskIntoConstraints = false
             
             addSubview(newPreview)
@@ -227,17 +241,11 @@ class ExpoIVSStagePreviewView: ExpoView {
     }
 
     private func updateScaleMode() {
+        // Only the AVCapture-backed custom layer can change gravity in place.
+        // The native IVS preview takes its aspect mode at creation; a change
+        // there is handled by the rebuild in `scaleMode`'s didSet.
         if isUsingCustomPreview {
             customPreviewLayer?.videoGravity = scaleMode.lowercased() == "fill" ? .resizeAspectFill : .resizeAspect
-        } else {
-            switch scaleMode.lowercased() {
-            case "fill":
-                ivsImagePreviewView?.contentMode = .scaleAspectFill
-            case "fit":
-                ivsImagePreviewView?.contentMode = .scaleAspectFit
-            default:
-                ivsImagePreviewView?.contentMode = .scaleAspectFill
-            }
         }
     }
     
