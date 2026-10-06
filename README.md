@@ -627,6 +627,12 @@ Planned features and improvements. Contributions are welcome — feel free to pi
 - [ ] Stats API (bitrate, fps, latency)
 - [ ] Web platform support (IVS Web SDK)
 
+## Author
+
+Built and maintained by [Arvin Rhen Medina](https://www.arvinrhen.com), a React Native and full-stack developer in Cavite, Philippines. The module runs in production inside [Mine](https://www.arvinrhen.com/projects/mine), a live-shopping app in the UAE, where it powers live auctions and the floating mini player.
+
+Shipping live video in an Expo app and stuck? [Book a free 30-minute call](https://cal.com/arvinrhen/project-call).
+
 ## Contributing
 
 Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for setup instructions and guidelines.
